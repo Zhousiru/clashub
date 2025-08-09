@@ -2,6 +2,10 @@
 
 Your configuration center for Clash. Built with Cloudflare.
 
+## Screenshot
+
+![Screenshot](./screenshot.jpg)
+
 ## Features
 
 - 提取 Proxy Providers
