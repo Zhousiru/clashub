@@ -25,13 +25,13 @@ token 存储在 KV，初次进入支持设置密码
 
 这是登陆后用户看到的第一个页面，用户可以在这个界面添加自己的 Clash 订阅链接
 
-添加订阅链接需要用户输入这个链接对应的 ID（由小写字母和 hyphen 组成的 string），称为 Source ID，和对应的链接地址，称为 Subscription URL
+添加订阅链接需要用户输入这个链接对应的 ID（由小写字母、数字、连字符和英文句点组成的 string），称为 Source ID，和对应的链接地址，称为 Subscription URL
 
 此页面整体布局呈现单栏布局，可以编辑已有项目的 Subscription URL
 
 ### Config Manager
 
-用户可以在此页面创建和编辑配置，配置由配置对应的 ID（由小写字母和 hyphen 组成的 string，称为 Config ID），和对应的配置内容（任意 YAML 文本，称为 Config）组成
+用户可以在此页面创建和编辑配置，配置由配置对应的 ID（由小写字母、数字、连字符和英文句点组成的 string，称为 Config ID），和对应的配置内容（任意 YAML 文本，称为 Config）组成
 
 此页面呈现双栏布局，左边是 Config ID 列表，选中对应的 Config ID 后，展示右栏编辑器（使用 Monaco 编辑器），用户可以进行编辑，带有保存按钮
 
@@ -39,7 +39,7 @@ token 存储在 KV，初次进入支持设置密码
 
 ### Fetcher Manager
 
-用户可以在此页面管理反向代理 URL，一个 fetcher 由 Fetcher ID（由小写字母和 hyphen 组成的 string）和 Fetcher URL，界面类似于 Proxy Provider Manager，区别在于编辑内容不同
+用户可以在此页面管理反向代理 URL，一个 fetcher 由 Fetcher ID（由小写字母、数字、连字符和英文句点组成的 string）和 Fetcher URL，界面类似于 Proxy Provider Manager，区别在于编辑内容不同
 
 ### Settings
 

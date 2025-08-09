@@ -191,7 +191,7 @@ export default function ProxyProviders() {
                     setFormData({ ...formData, id: e.target.value })
                   }
                   placeholder="例如: my-provider"
-                  helperText="只能包含小写字母、数字和连字符"
+                  helperText="只能包含小写字母、数字、连字符和英文句点"
                   disabled={!!editingProvider}
                   required
                 />

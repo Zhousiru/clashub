@@ -239,7 +239,7 @@ export default function Configs() {
                   value={newConfigId}
                   onChange={(e) => setNewConfigId(e.target.value)}
                   placeholder="例如: my-config"
-                  helperText="只能包含小写字母、数字和连字符"
+                  helperText="只能包含小写字母、数字、连字符和英文句点"
                   required
                 />
 

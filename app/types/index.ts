@@ -8,7 +8,7 @@ export interface AuthToken {
 
 // Proxy Provider 相关
 export interface ProxyProvider {
-  id: string // Source ID - 小写字母和hyphen组成
+  id: string // Source ID - 小写字母、数字、连字符和英文句点组成
   subscriptionUrl: string // Subscription URL
   createdAt: string
   updatedAt: string
@@ -16,7 +16,7 @@ export interface ProxyProvider {
 
 // Config 相关
 export interface Config {
-  id: string // Config ID - 小写字母和hyphen组成
+  id: string // Config ID - 小写字母、数字、连字符和英文句点组成
   content: string // YAML 内容
   createdAt: string
   updatedAt: string
@@ -24,7 +24,7 @@ export interface Config {
 
 // Fetcher 相关
 export interface Fetcher {
-  id: string // Fetcher ID - 小写字母和hyphen组成
+  id: string // Fetcher ID - 小写字母、数字、连字符和英文句点组成
   url: string // Fetcher URL
   createdAt: string
   updatedAt: string
@@ -92,7 +92,7 @@ export enum KVKeys {
 }
 
 // ID 验证正则
-export const ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/
+export const ID_PATTERN = /^[a-z0-9.]+(-[a-z0-9.]+)*$/
 
 // 错误类型
 export class ValidationError extends Error {

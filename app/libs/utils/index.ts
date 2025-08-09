@@ -10,7 +10,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * 验证 ID 格式（小写字母和 hyphen）
+ * 验证 ID 格式（小写字母、数字、连字符和英文句点）
  */
 export function validateId(id: string): boolean {
   return ID_PATTERN.test(id)
@@ -53,9 +53,9 @@ export function generateId(): string {
  * 清理和验证 ID 输入
  */
 export function sanitizeId(input: string): string {
-  const cleaned = input.toLowerCase().replace(/[^a-z0-9-]/g, '')
+  const cleaned = input.toLowerCase().replace(/[^a-z0-9.-]/g, '')
   if (!validateId(cleaned)) {
-    throw new ValidationError('ID 必须由小写字母和连字符组成')
+    throw new ValidationError('ID 必须由小写字母、数字、连字符和英文句点组成')
   }
   return cleaned
 }
