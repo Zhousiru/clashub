@@ -7,7 +7,7 @@ Clashub 是一个可以把用户输入的 Clash 订阅链接进行处理和转�
 React Router 7 + Cloudflare 全栈 Web App
 
 FE：React 19、Tailwind v4 + Radix UI (If necessary) + Tabler Icon、@monaco-editor/react
-BE：Cloudflare Durable Object、React Router Loader
+BE：Cloudflare KV、React Router Loader
 
 ## 模块 / 页面
 
@@ -15,7 +15,7 @@ BE：Cloudflare Durable Object、React Router Loader
 
 提供基本的身份验证功能，用户只需要输入密码（称为 token）即可登录，不需要账号与登录功能
 
-token 存储在 Durable Object KV，初次进入支持设置密码
+token 存储在 KV，初次进入支持设置密码
 
 所有必要的操作都需要 token 传入，考虑实现验证中间件存放在 HTTP Only Cookie 中
 
@@ -39,7 +39,7 @@ token 存储在 Durable Object KV，初次进入支持设置密码
 
 ### Fetcher Manager
 
-用户可以在此页面管理反向代理 URL，一个 fetcher 由 Fetcher ID（由小写字母和 hyphen 组成的 string）和 cURL 命令组成（称为 cURL），界面类似于 Config Manager，区别在于编辑器内容不同
+用户可以在此页面管理反向代理 URL，一个 fetcher 由 Fetcher ID（由小写字母和 hyphen 组成的 string）和 Fetcher URL，界面类似于 Proxy Provider Manager，区别在于编辑内容不同
 
 ### Settings
 
@@ -68,19 +68,13 @@ token 存储在 Durable Object KV，初次进入支持设置密码
 
 - /api/v1/fetcher/<Fetcher ID>
 
-  解析对应 Fetcher ID 的 cURL 命令（考虑使用 curlconverter），发起请求，按原样返回（相当于反向代理）
+  对 Fetcher ID 对应的 URL 发起请求，按原样返回（相当于反向代理）
 
 所有的 API 端点都需要加上 query，?token=<token> 来认证用户身份
 
 ## 架构规范
 
-实现分层，把数据交互相关操作封装在 Durable Object Class 中。抽离可复用组件到 components，可复用工具函数到 utils，Durable Object 封装在 services 中，并且在 app.ts 中重新导出
-
-Durable Object 可参考资料：
-
-- https://developers.cloudflare.com/durable-objects/best-practices/create-durable-object-stubs-and-send-requests/
-
-- https://developers.cloudflare.com/durable-objects/get-started/
+实现分层，把 KV 数据交互相关操作封装在 service 中。抽离可复用组件到 components（按钮、输入框、列表等），可复用工具函数到 utils
 
 ## 设计风格
 

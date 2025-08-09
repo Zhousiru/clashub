@@ -12,21 +12,30 @@
     "typecheck": "npm run cf-typegen && react-router typegen && tsc -b"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-label": "^2.1.7",
+    "@tabler/icons-react": "^3.34.1",
+    "clsx": "^2.1.1",
     "isbot": "^5.1.27",
+    "js-yaml": "^4.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-router": "^7.7.1"
+    "react-hot-toast": "^2.5.2",
+    "react-router": "^7.7.1",
+    "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.0.12",
     "@react-router/dev": "^7.7.1",
     "@tailwindcss/vite": "^4.1.4",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "tailwindcss": "^4.1.4",
     "typescript": "^5.8.3",
-    "vite": "^6.3.3",
+    "vite": "^7.1.1",
     "vite-tsconfig-paths": "^5.1.4",
     "wrangler": "^4.28.1"
   },
