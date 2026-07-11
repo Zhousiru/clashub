@@ -10,7 +10,7 @@ import { Button } from '~/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/Card'
 import { Input } from '~/components/ui/Input'
 import { AuthService, generateTokenCookie } from '~/libs/services/auth'
-import { getKVService } from '~/libs/services/kv'
+import { getStoreService } from '~/libs/services/store'
 import { optionalAuth } from '~/libs/utils/auth'
 import type { Route } from './+types/login'
 
@@ -61,8 +61,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   try {
-    const kvService = getKVService(context)
-    const authService = new AuthService(kvService)
+    const authService = new AuthService(getStoreService(context))
 
     if (isSetup) {
       // 初次设置密码

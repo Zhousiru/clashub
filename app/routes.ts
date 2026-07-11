@@ -21,4 +21,12 @@ export default [
   ),
   route('api/v1/config/:configId', 'routes/api.v1.config.$configId.tsx'),
   route('api/v1/fetcher/:fetcherId', 'routes/api.v1.fetcher.$fetcherId.tsx'),
+
+  // JSON 管理 API（供自动化和 Skill 使用）
+  route('api/v1/admin/snapshot', 'routes/api.v1.admin.snapshot.tsx'),
+  route('api/v1/admin/:resource', 'routes/api.v1.admin.$resource.tsx'),
+  route(
+    'api/v1/admin/:resource/:resourceId',
+    'routes/api.v1.admin.$resource.$resourceId.tsx',
+  ),
 ] satisfies RouteConfig

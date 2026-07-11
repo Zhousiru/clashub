@@ -12,8 +12,8 @@ import { Button } from '~/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/Card'
 import { Input } from '~/components/ui/Input'
 import { List, ListContent, ListItem } from '~/components/ui/List'
-import { getKVService } from '~/libs/services/kv'
-import { sanitizeId, validateUrl } from '~/libs/utils'
+import { FetchersService } from '~/libs/services/clashub'
+import { getStoreService, StoreError } from '~/libs/services/store'
 import { requireAuth } from '~/libs/utils/auth'
 import type { Fetcher } from '~/types'
 import type { Route } from './+types/fetchers'
@@ -33,8 +33,7 @@ interface ActionData {
 export async function loader({ request, context }: Route.LoaderArgs) {
   await requireAuth(request, context)
 
-  const kvService = getKVService(context)
-  const fetchers = await kvService.getFetchers()
+  const fetchers = await new FetchersService(getStoreService(context)).list()
 
   return { fetchers }
 }
@@ -45,7 +44,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const formData = await request.formData()
   const action = formData.get('action') as string
 
-  const kvService = getKVService(context)
+  const fetchers = new FetchersService(getStoreService(context))
 
   try {
     switch (action) {
@@ -53,37 +52,32 @@ export async function action({ request, context }: Route.ActionArgs) {
       case 'edit': {
         const id = formData.get('id') as string
         const url = formData.get('url') as string
+        const expectedRevision = Number(formData.get('revision'))
 
         if (!id || !url) {
           return { error: '请填写所有必填字段' }
         }
 
-        if (!validateUrl(url)) {
-          return { error: '请输入有效的 URL' }
-        }
-
-        const sanitizedId = sanitizeId(id)
-
-        await kvService.saveFetcher({
-          id: sanitizedId,
-          url,
-        })
-
-        return {
-          success: `Fetcher "${sanitizedId}" ${action === 'add' ? '添加' : '更新'}成功`,
+        if (action === 'add') {
+          const fetcher = await fetchers.create(id, url)
+          return { success: `Fetcher "${fetcher.id}" 添加成功` }
+        } else {
+          if (!Number.isInteger(expectedRevision)) {
+            return { error: '更新请求无效' }
+          }
+          const fetcher = await fetchers.update(id, url, expectedRevision)
+          return { success: `Fetcher "${fetcher.id}" 更新成功` }
         }
       }
 
       case 'delete': {
         const id = formData.get('id') as string
-        if (!id) {
+        const expectedRevision = Number(formData.get('revision'))
+        if (!id || !Number.isInteger(expectedRevision)) {
           return { error: 'ID 不能为空' }
         }
 
-        const deleted = await kvService.deleteFetcher(id)
-        if (!deleted) {
-          return { error: 'Fetcher 不存在' }
-        }
+        await fetchers.delete(id, expectedRevision)
 
         return { success: `Fetcher "${id}" 删除成功` }
       }
@@ -92,6 +86,9 @@ export async function action({ request, context }: Route.ActionArgs) {
         return { error: '无效的操作' }
     }
   } catch (error) {
+    if (error instanceof StoreError && error.status === 409) {
+      return { error: 'Fetcher 已存在或已被其他请求更新，请刷新后重试' }
+    }
     return {
       error: error instanceof Error ? error.message : '操作失败',
     }
@@ -138,7 +135,7 @@ export default function Fetchers() {
     if (message.includes('添加') || message.includes('更新')) {
       resetForm()
     }
-  }, [actionData?.success])
+  }, [actionData])
 
   return (
     <Layout>
@@ -188,7 +185,14 @@ export default function Fetchers() {
                   value={editingFetcher ? 'edit' : 'add'}
                 />
                 {editingFetcher && (
-                  <input type="hidden" name="id" value={formData.id} />
+                  <>
+                    <input type="hidden" name="id" value={formData.id} />
+                    <input
+                      type="hidden"
+                      name="revision"
+                      value={editingFetcher.revision}
+                    />
+                  </>
                 )}
 
                 <Input
@@ -279,6 +283,11 @@ export default function Fetchers() {
                           <Form method="post" className="inline">
                             <input type="hidden" name="action" value="delete" />
                             <input type="hidden" name="id" value={fetcher.id} />
+                            <input
+                              type="hidden"
+                              name="revision"
+                              value={fetcher.revision}
+                            />
                             <Button
                               size="sm"
                               variant="danger"

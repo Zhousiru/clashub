@@ -10,6 +10,7 @@ export interface AuthToken {
 export interface ProxyProvider {
   id: string // Source ID - 小写字母、数字、连字符和英文句点组成
   subscriptionUrl: string // Subscription URL
+  revision: number
   createdAt: string
   updatedAt: string
 }
@@ -18,6 +19,7 @@ export interface ProxyProvider {
 export interface Config {
   id: string // Config ID - 小写字母、数字、连字符和英文句点组成
   content: string // YAML 内容
+  revision: number // 乐观并发控制版本号
   createdAt: string
   updatedAt: string
 }
@@ -26,6 +28,7 @@ export interface Config {
 export interface Fetcher {
   id: string // Fetcher ID - 小写字母、数字、连字符和英文句点组成
   url: string // Fetcher URL
+  revision: number
   createdAt: string
   updatedAt: string
 }
@@ -81,14 +84,6 @@ export interface RouteParams {
   sourceId?: string
   configId?: string
   fetcherId?: string
-}
-
-// KV 存储键名
-export enum KVKeys {
-  AUTH_TOKEN = 'auth:token',
-  PROXY_PROVIDERS = 'proxy-providers',
-  CONFIGS = 'configs',
-  FETCHERS = 'fetchers',
 }
 
 // ID 验证正则

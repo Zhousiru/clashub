@@ -1,4 +1,4 @@
-import { getKVService } from '~/libs/services/kv'
+import { getStoreService } from '~/libs/services/store'
 import { requireApiAuth } from '~/libs/utils/auth'
 import { extractProxiesFromClash } from '~/libs/utils/yaml'
 import type { Route } from './+types/api.v1.proxy-provider.$sourceId'
@@ -13,10 +13,10 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   }
 
   try {
-    const kvService = getKVService(context)
+    const store = getStoreService(context)
 
     // 获取 Proxy Provider 配置
-    const provider = await kvService.getProxyProvider(sourceId)
+    const provider = await store.getProxyProvider(sourceId)
     if (!provider) {
       throw new Response(`Proxy Provider "${sourceId}" not found`, {
         status: 404,
@@ -33,7 +33,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     if (!response.ok) {
       throw new Response(
         `Failed to fetch subscription: ${response.status} ${response.statusText}`,
-        { status: 502 }
+        { status: 502 },
       )
     }
 
@@ -59,7 +59,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
 
     throw new Response(
       `Internal server error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

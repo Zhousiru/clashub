@@ -6,8 +6,8 @@ import { Button } from '~/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/Card'
 import { Input } from '~/components/ui/Input'
 import { List, ListContent, ListItem } from '~/components/ui/List'
-import { getKVService } from '~/libs/services/kv'
-import { sanitizeId, validateUrl } from '~/libs/utils'
+import { ProxyProvidersService } from '~/libs/services/clashub'
+import { getStoreService, StoreError } from '~/libs/services/store'
 import { requireAuth } from '~/libs/utils/auth'
 import type { ProxyProvider } from '~/types'
 import type { Route } from './+types/proxy-providers'
@@ -27,8 +27,9 @@ interface ActionData {
 export async function loader({ request, context }: Route.LoaderArgs) {
   await requireAuth(request, context)
 
-  const kvService = getKVService(context)
-  const providers = await kvService.getProxyProviders()
+  const providers = await new ProxyProvidersService(
+    getStoreService(context),
+  ).list()
 
   return { providers }
 }
@@ -39,7 +40,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const formData = await request.formData()
   const action = formData.get('action') as string
 
-  const kvService = getKVService(context)
+  const providers = new ProxyProvidersService(getStoreService(context))
 
   try {
     switch (action) {
@@ -47,37 +48,36 @@ export async function action({ request, context }: Route.ActionArgs) {
       case 'edit': {
         const id = formData.get('id') as string
         const subscriptionUrl = formData.get('subscriptionUrl') as string
+        const expectedRevision = Number(formData.get('revision'))
 
         if (!id || !subscriptionUrl) {
           return { error: '请填写所有必填字段' }
         }
 
-        if (!validateUrl(subscriptionUrl)) {
-          return { error: '请输入有效的 URL' }
-        }
-
-        const sanitizedId = sanitizeId(id)
-
-        await kvService.saveProxyProvider({
-          id: sanitizedId,
-          subscriptionUrl,
-        })
-
-        return {
-          success: `Proxy Provider "${sanitizedId}" ${action === 'add' ? '添加' : '更新'}成功`,
+        if (action === 'add') {
+          const provider = await providers.create(id, subscriptionUrl)
+          return { success: `Proxy Provider "${provider.id}" 添加成功` }
+        } else {
+          if (!Number.isInteger(expectedRevision)) {
+            return { error: '更新请求无效' }
+          }
+          const provider = await providers.update(
+            id,
+            subscriptionUrl,
+            expectedRevision,
+          )
+          return { success: `Proxy Provider "${provider.id}" 更新成功` }
         }
       }
 
       case 'delete': {
         const id = formData.get('id') as string
-        if (!id) {
+        const expectedRevision = Number(formData.get('revision'))
+        if (!id || !Number.isInteger(expectedRevision)) {
           return { error: 'ID 不能为空' }
         }
 
-        const deleted = await kvService.deleteProxyProvider(id)
-        if (!deleted) {
-          return { error: 'Proxy Provider 不存在' }
-        }
+        await providers.delete(id, expectedRevision)
 
         return { success: `Proxy Provider "${id}" 删除成功` }
       }
@@ -86,6 +86,9 @@ export async function action({ request, context }: Route.ActionArgs) {
         return { error: '无效的操作' }
     }
   } catch (error) {
+    if (error instanceof StoreError && error.status === 409) {
+      return { error: 'Provider 已存在或已被其他请求更新，请刷新后重试' }
+    }
     return {
       error: error instanceof Error ? error.message : '操作失败',
     }
@@ -96,7 +99,7 @@ export default function ProxyProviders() {
   const { providers } = useLoaderData<typeof loader>()
   const actionData = useActionData<ActionData>()
   const [editingProvider, setEditingProvider] = useState<ProxyProvider | null>(
-    null
+    null,
   )
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState({ id: '', subscriptionUrl: '' })
@@ -114,7 +117,7 @@ export default function ProxyProviders() {
     if (message.includes('添加') || message.includes('更新')) {
       resetForm()
     }
-  }, [actionData?.success])
+  }, [actionData])
 
   const handleEdit = (provider: ProxyProvider) => {
     setFormData({ id: provider.id, subscriptionUrl: provider.subscriptionUrl })
@@ -180,7 +183,14 @@ export default function ProxyProviders() {
                   value={editingProvider ? 'edit' : 'add'}
                 />
                 {editingProvider && (
-                  <input type="hidden" name="id" value={formData.id} />
+                  <>
+                    <input type="hidden" name="id" value={formData.id} />
+                    <input
+                      type="hidden"
+                      name="revision"
+                      value={editingProvider.revision}
+                    />
+                  </>
                 )}
 
                 <Input
@@ -267,6 +277,11 @@ export default function ProxyProviders() {
                               type="hidden"
                               name="id"
                               value={provider.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="revision"
+                              value={provider.revision}
                             />
                             <Button
                               size="sm"

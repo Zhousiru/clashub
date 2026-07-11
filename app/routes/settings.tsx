@@ -6,7 +6,7 @@ import { Button } from '~/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/Card'
 import { Input } from '~/components/ui/Input'
 import { AuthService, generateTokenCookie } from '~/libs/services/auth'
-import { getKVService } from '~/libs/services/kv'
+import { getStoreService } from '~/libs/services/store'
 import { requireAuth } from '~/libs/utils/auth'
 import type { Route } from './+types/settings'
 
@@ -60,8 +60,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   try {
-    const kvService = getKVService(context)
-    const authService = new AuthService(kvService)
+    const authService = new AuthService(getStoreService(context))
 
     // 安全地更改密码，需要验证当前token
     await authService.changeToken(loggedInToken, newToken)

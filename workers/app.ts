@@ -1,5 +1,7 @@
 import { createRequestHandler } from 'react-router'
 
+export { ClashubStore } from './store'
+
 declare module 'react-router' {
   export interface AppLoadContext {
     cloudflare: {
@@ -11,7 +13,7 @@ declare module 'react-router' {
 
 const requestHandler = createRequestHandler(
   () => import('virtual:react-router/server-build'),
-  import.meta.env.MODE
+  import.meta.env.MODE,
 )
 
 export default {

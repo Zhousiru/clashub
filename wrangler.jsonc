@@ -10,11 +10,18 @@
   "observability": {
     "enabled": true,
   },
-  "kv_namespaces": [
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "STORE",
+        "class_name": "ClashubStore",
+      },
+    ],
+  },
+  "migrations": [
     {
-      "binding": "KV",
-      "id": "placeholder_kv_id",
-      "preview_id": "placeholder_preview_kv_id",
+      "tag": "v1",
+      "new_sqlite_classes": ["ClashubStore"],
     },
   ],
 }

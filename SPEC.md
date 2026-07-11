@@ -72,6 +72,28 @@ token 存储在 KV，初次进入支持设置密码
 
 所有的 API 端点都需要加上 query，?token=<token> 来认证用户身份
 
+### Management API
+
+管理 API 面向自动化客户端和 Codex Skill，使用 JSON 读写 Config、Proxy
+Provider 和 Fetcher。认证信息必须通过请求头传递：
+
+```
+Authorization: Bearer <token>
+```
+
+管理 API 不接受 query token，也不会返回当前认证 token。所有响应都设置
+`Cache-Control: no-store`。
+
+- `GET /api/v1/admin/snapshot`：读取三类资源的完整快照
+- `GET /api/v1/admin/<resource>`：列出资源
+- `POST /api/v1/admin/<resource>`：创建资源，ID 放在 JSON body 中
+- `GET /api/v1/admin/<resource>/<id>`：读取单个资源
+- `PUT /api/v1/admin/<resource>/<id>`：更新资源
+- `DELETE /api/v1/admin/<resource>/<id>`：删除资源
+
+其中 `<resource>` 为 `configs`、`proxy-providers` 或 `fetchers`。更新和删除
+必须传入 `expectedRevision`；版本不一致时返回 `409 Conflict` 和当前记录。
+
 ## 架构规范
 
 实现分层，把 KV 数据交互相关操作封装在 service 中。抽离可复用组件到 components（按钮、输入框、列表等），可复用工具函数到 utils

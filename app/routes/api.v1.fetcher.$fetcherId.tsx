@@ -1,4 +1,4 @@
-import { getKVService } from '~/libs/services/kv'
+import { getStoreService } from '~/libs/services/store'
 import { requireApiAuth } from '~/libs/utils/auth'
 import type { Route } from './+types/api.v1.fetcher.$fetcherId'
 
@@ -12,10 +12,10 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   }
 
   try {
-    const kvService = getKVService(context)
+    const store = getStoreService(context)
 
     // 获取 Fetcher 配置
-    const fetcher = await kvService.getFetcher(fetcherId)
+    const fetcher = await store.getFetcher(fetcherId)
     if (!fetcher) {
       throw new Response(`Fetcher "${fetcherId}" not found`, { status: 404 })
     }
@@ -47,7 +47,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
         headers: {
           'Content-Type': 'text/plain; charset=utf-8',
         },
-      }
+      },
     )
   }
 }

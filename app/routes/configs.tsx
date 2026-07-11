@@ -6,14 +6,14 @@ import {
   IconTrash,
 } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
-import { Form, useActionData, useLoaderData } from 'react-router'
+import { Form, useActionData, useLoaderData, useNavigation } from 'react-router'
 import Layout from '~/components/Layout'
 import { Button } from '~/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/Card'
 import { Input } from '~/components/ui/Input'
 import { List, ListContent, ListItem } from '~/components/ui/List'
-import { getKVService } from '~/libs/services/kv'
-import { sanitizeId } from '~/libs/utils'
+import { ConfigsService } from '~/libs/services/clashub'
+import { getStoreService, StoreError } from '~/libs/services/store'
 import { requireAuth } from '~/libs/utils/auth'
 import type { Config } from '~/types'
 import type { Route } from './+types/configs'
@@ -25,16 +25,16 @@ export const meta: Route.MetaFunction = () => {
   ]
 }
 
-interface ActionData {
-  error?: string
-  success?: string
-}
+type ActionData =
+  | { success: string; intent: 'save'; config: Config }
+  | { success: string; intent: 'create'; config: Config }
+  | { success: string; intent: 'delete'; id: string }
+  | { error: string; intent?: string }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   await requireAuth(request, context)
 
-  const kvService = getKVService(context)
-  const configs = await kvService.getConfigs()
+  const configs = await new ConfigsService(getStoreService(context)).list()
 
   return { configs }
 }
@@ -43,28 +43,32 @@ export async function action({ request, context }: Route.ActionArgs) {
   await requireAuth(request, context)
 
   const formData = await request.formData()
-  const action = formData.get('action') as string
+  const intent = formData.get('action') as string
 
-  const kvService = getKVService(context)
+  const configs = new ConfigsService(getStoreService(context))
 
   try {
-    switch (action) {
+    switch (intent) {
       case 'save': {
         const id = formData.get('id') as string
         const content = formData.get('content') as string
+        const expectedRevision = Number(formData.get('revision'))
 
-        if (!id) {
-          return { error: 'Config ID 不能为空' }
+        if (!id || !Number.isInteger(expectedRevision)) {
+          return { error: '保存请求无效', intent }
         }
 
-        const sanitizedId = sanitizeId(id)
+        const config = await configs.update(
+          id,
+          content || '',
+          expectedRevision,
+        )
 
-        await kvService.saveConfig({
-          id: sanitizedId,
-          content: content || '',
-        })
-
-        return { success: `Config "${sanitizedId}" 保存成功` }
+        return {
+          success: `Config "${config.id}" 保存成功`,
+          intent,
+          config,
+        }
       }
 
       case 'create': {
@@ -74,44 +78,43 @@ export async function action({ request, context }: Route.ActionArgs) {
           return { error: 'Config ID 不能为空' }
         }
 
-        const sanitizedId = sanitizeId(id)
-
-        // 检查是否已存在
-        const existingConfig = await kvService.getConfig(sanitizedId)
-        if (existingConfig) {
-          return { error: `Config "${sanitizedId}" 已存在` }
-        }
-
-        await kvService.saveConfig({
-          id: sanitizedId,
-          content: '',
-        })
+        const config = await configs.create(id)
 
         return {
-          success: `Config "${sanitizedId}" 创建成功`,
+          success: `Config "${config.id}" 创建成功`,
+          intent,
+          config,
         }
       }
 
       case 'delete': {
         const id = formData.get('id') as string
-        if (!id) {
-          return { error: 'Config ID 不能为空' }
+        const expectedRevision = Number(formData.get('revision'))
+        if (!id || !Number.isInteger(expectedRevision)) {
+          return { error: '删除请求无效', intent }
         }
 
-        const deleted = await kvService.deleteConfig(id)
-        if (!deleted) {
-          return { error: 'Config 不存在' }
-        }
+        await configs.delete(id, expectedRevision)
 
-        return { success: `Config "${id}" 删除成功` }
+        return { success: `Config "${id}" 删除成功`, intent, id }
       }
 
       default:
-        return { error: '无效的操作' }
+        return { error: '无效的操作', intent }
     }
   } catch (error) {
+    if (error instanceof StoreError && error.status === 409) {
+      return {
+        error:
+          intent === 'create'
+            ? 'Config 已存在'
+            : '配置已被其他请求更新，请重新选择后再试',
+        intent,
+      }
+    }
     return {
       error: error instanceof Error ? error.message : '操作失败',
+      intent,
     }
   }
 }
@@ -119,73 +122,71 @@ export async function action({ request, context }: Route.ActionArgs) {
 export default function Configs() {
   const { configs } = useLoaderData<typeof loader>()
   const actionData = useActionData<ActionData>()
-  const [selectedConfig, setSelectedConfig] = useState<Config | null>(null)
+  const navigation = useNavigation()
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedRevision, setSelectedRevision] = useState<number | null>(null)
   const [editorContent, setEditorContent] = useState('')
+  const [lastSavedContent, setLastSavedContent] = useState('')
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newConfigId, setNewConfigId] = useState('')
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const pendingIntent = navigation.formData?.get('action')
+  const isMutating = navigation.state !== 'idle' && pendingIntent !== null
+  const isSaving = isMutating && pendingIntent === 'save'
+  const hasUnsavedChanges =
+    selectedId !== null && editorContent !== lastSavedContent
 
-  // 创建成功后，仅关闭并清空创建表单（不自动切换）
+  // 使用结构化操作响应更新对应配置，避免重复文案和跨配置响应污染状态。
   useEffect(() => {
-    const message = actionData?.success
-    if (!message) return
-    if (message.includes('创建')) {
+    if (!actionData || !('success' in actionData)) return
+
+    if (actionData.intent === 'create') {
       setShowCreateForm(false)
       setNewConfigId('')
     }
-  }, [actionData?.success])
 
-  // 保存成功后重置未保存状态
-  useEffect(() => {
-    const message = actionData?.success
-    if (!message) return
-    if (message.includes('保存成功')) {
-      setHasUnsavedChanges(false)
+    if (actionData.intent === 'save' && actionData.config.id === selectedId) {
+      setLastSavedContent(actionData.config.content)
+      setSelectedRevision(actionData.config.revision)
     }
-  }, [actionData?.success])
+
+    if (actionData.intent === 'delete' && actionData.id === selectedId) {
+      setSelectedId(null)
+      setSelectedRevision(null)
+      setEditorContent('')
+      setLastSavedContent('')
+    }
+  }, [actionData])
 
   // 当 configs 列表变化时，确保选中的 config 仍然有效。
   // 如果当前正在编辑的 config 被删除，则仅清空选择与编辑器，不做自动切换。
   useEffect(() => {
-    if (!selectedConfig) return
-    const exists = configs.some((c) => c.id === selectedConfig.id)
+    if (!selectedId) return
+    const exists = configs.some((config) => config.id === selectedId)
     if (!exists) {
-      setSelectedConfig(null)
+      setSelectedId(null)
+      setSelectedRevision(null)
       setEditorContent('')
-      setHasUnsavedChanges(false)
+      setLastSavedContent('')
     }
-  }, [configs, selectedConfig])
-
-  // 当选择的配置改变时，更新编辑器内容
-  useEffect(() => {
-    if (selectedConfig) {
-      setEditorContent(selectedConfig.content)
-      setHasUnsavedChanges(false)
-    } else {
-      setEditorContent('')
-      setHasUnsavedChanges(false)
-    }
-  }, [selectedConfig])
+  }, [configs, selectedId])
 
   // 监听编辑器内容变化
   const handleEditorChange = (value: string | undefined) => {
     const newContent = value || ''
     setEditorContent(newContent)
-    // 只有在有选中配置时才判断是否有未保存的更改
-    if (selectedConfig) {
-      setHasUnsavedChanges(newContent !== selectedConfig.content)
-    } else {
-      setHasUnsavedChanges(false)
-    }
   }
 
   const handleConfigSelect = (config: Config) => {
+    if (isMutating) return
     if (hasUnsavedChanges) {
       if (!confirm('有未保存的更改，确定要切换配置吗？')) {
         return
       }
     }
-    setSelectedConfig(config)
+    setSelectedId(config.id)
+    setSelectedRevision(config.revision)
+    setEditorContent(config.content)
+    setLastSavedContent(config.content)
   }
 
   const copyApiUrl = (configId: string) => {
@@ -205,19 +206,19 @@ export default function Configs() {
               管理您的 YAML 配置文件
             </p>
           </div>
-          <Button onClick={() => setShowCreateForm(true)}>
+          <Button disabled={isMutating} onClick={() => setShowCreateForm(true)}>
             <IconPlus size={16} className="mr-2" />
             创建 Config
           </Button>
         </div>
 
         {/* 成功/错误消息 */}
-        {actionData?.success && (
+        {actionData && 'success' in actionData && (
           <div className="p-4 border border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
             {actionData.success}
           </div>
         )}
-        {actionData?.error && (
+        {actionData && 'error' in actionData && (
           <div className="p-4 border border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
             {actionData.error}
           </div>
@@ -240,14 +241,18 @@ export default function Configs() {
                   onChange={(e) => setNewConfigId(e.target.value)}
                   placeholder="例如: my-config"
                   helperText="只能包含小写字母、数字、连字符和英文句点"
+                  disabled={isMutating}
                   required
                 />
 
                 <div className="flex space-x-2">
-                  <Button type="submit">创建</Button>
+                  <Button type="submit" disabled={isMutating}>
+                    {pendingIntent === 'create' ? '创建中' : '创建'}
+                  </Button>
                   <Button
                     type="button"
                     variant="secondary"
+                    disabled={isMutating}
                     onClick={() => {
                       setShowCreateForm(false)
                       setNewConfigId('')
@@ -279,7 +284,7 @@ export default function Configs() {
                     {configs.map((config) => (
                       <ListItem
                         key={config.id}
-                        selected={selectedConfig?.id === config.id}
+                        selected={selectedId === config.id}
                         onSelect={() => handleConfigSelect(config)}
                       >
                         <ListContent
@@ -308,10 +313,16 @@ export default function Configs() {
                                   name="id"
                                   value={config.id}
                                 />
+                                <input
+                                  type="hidden"
+                                  name="revision"
+                                  value={config.revision}
+                                />
                                 <Button
                                   size="sm"
                                   variant="danger"
                                   type="submit"
+                                  disabled={isMutating}
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     if (
@@ -341,17 +352,18 @@ export default function Configs() {
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle>
-                    {selectedConfig
-                      ? `编辑: ${selectedConfig.id}`
+                    {selectedId
+                      ? `编辑: ${selectedId}`
                       : '选择一个配置进行编辑'}
                   </CardTitle>
-                  {selectedConfig && (
+                  {selectedId && selectedRevision !== null && (
                     <Form method="post">
                       <input type="hidden" name="action" value="save" />
+                      <input type="hidden" name="id" value={selectedId} />
                       <input
                         type="hidden"
-                        name="id"
-                        value={selectedConfig.id}
+                        name="revision"
+                        value={selectedRevision}
                       />
                       <input
                         type="hidden"
@@ -360,18 +372,22 @@ export default function Configs() {
                       />
                       <Button
                         type="submit"
-                        disabled={!hasUnsavedChanges}
+                        disabled={!hasUnsavedChanges || isMutating}
                         variant={hasUnsavedChanges ? 'primary' : 'secondary'}
                       >
                         <IconDeviceFloppy size={16} className="mr-2" />
-                        {hasUnsavedChanges ? '保存更改' : '已保存'}
+                        {isSaving
+                          ? '保存中'
+                          : hasUnsavedChanges
+                            ? '保存更改'
+                            : '已保存'}
                       </Button>
                     </Form>
                   )}
                 </div>
               </CardHeader>
               <CardContent>
-                {selectedConfig ? (
+                {selectedId ? (
                   <div className="h-96 border border-gray-200 dark:border-gray-800">
                     <Editor
                       height="100%"
@@ -389,6 +405,7 @@ export default function Configs() {
                         tabSize: 2,
                         insertSpaces: true,
                         detectIndentation: false,
+                        readOnly: isMutating,
                       }}
                     />
                   </div>

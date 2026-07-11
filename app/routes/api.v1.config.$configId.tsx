@@ -1,4 +1,4 @@
-import { getKVService } from '~/libs/services/kv'
+import { getStoreService } from '~/libs/services/store'
 import { requireApiAuth } from '~/libs/utils/auth'
 import type { Route } from './+types/api.v1.config.$configId'
 
@@ -12,10 +12,10 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   }
 
   try {
-    const kvService = getKVService(context)
+    const store = getStoreService(context)
 
     // 获取配置内容
-    const config = await kvService.getConfig(configId)
+    const config = await store.getConfig(configId)
     if (!config) {
       throw new Response(`Config "${configId}" not found`, { status: 404 })
     }
@@ -24,7 +24,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     return new Response(config.content, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'public, max-age=60', // 缓存 1 分钟
+        'Cache-Control': 'no-store',
         'X-Config-Id': configId,
         'X-Last-Modified': config.updatedAt,
       },
@@ -38,7 +38,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
 
     throw new Response(
       `Internal server error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

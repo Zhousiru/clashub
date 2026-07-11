@@ -4,7 +4,7 @@ import {
   extractTokenFromCookie,
   extractTokenFromQuery,
 } from '~/libs/services/auth'
-import { getKVService } from '~/libs/services/kv'
+import { getStoreService } from '~/libs/services/store'
 
 /**
  * 从请求中获取 token（优先从 cookie，其次从 query）
@@ -27,10 +27,9 @@ export function getTokenFromRequest(request: Request): string | null {
  */
 export async function requireAuth(
   request: Request,
-  context: any
+  context: any,
 ): Promise<string> {
-  const kvService = getKVService(context)
-  const authService = new AuthService(kvService)
+  const authService = new AuthService(getStoreService(context))
 
   // 检查是否有设置过 token
   const hasToken = await authService.hasToken()
@@ -58,15 +57,14 @@ export async function requireAuth(
  */
 export async function optionalAuth(
   request: Request,
-  context: any
+  context: any,
 ): Promise<{
   isAuthenticated: boolean
   token: string | null
   needsSetup: boolean
 }> {
   try {
-    const kvService = getKVService(context)
-    const authService = new AuthService(kvService)
+    const authService = new AuthService(getStoreService(context))
 
     // 检查是否有设置过 token
     const hasToken = await authService.hasToken()
@@ -109,10 +107,9 @@ export async function optionalAuth(
  */
 export async function requireApiAuth(
   request: Request,
-  context: any
+  context: any,
 ): Promise<string> {
-  const kvService = getKVService(context)
-  const authService = new AuthService(kvService)
+  const authService = new AuthService(getStoreService(context))
 
   // 获取 token（API 调用必须通过 query 参数）
   const url = new URL(request.url)
@@ -132,12 +129,47 @@ export async function requireApiAuth(
 }
 
 /**
+ * 管理 API 认证，只接受 Authorization: Bearer <token>。
+ * 管理凭据不允许放在 URL 中，避免被浏览器历史和访问日志记录。
+ */
+export async function requireAdminApiAuth(
+  request: Request,
+  context: any,
+): Promise<string> {
+  const authorization = request.headers.get('Authorization')
+  const match = authorization?.match(/^Bearer\s+(.+)$/i)
+  const token = match?.[1]?.trim()
+
+  if (!token) {
+    throw Response.json(
+      { error: 'Unauthorized: Missing bearer token' },
+      {
+        status: 401,
+        headers: { 'Cache-Control': 'no-store' },
+      },
+    )
+  }
+
+  const authService = new AuthService(getStoreService(context))
+  if (!(await authService.verifyToken(token))) {
+    throw Response.json(
+      { error: 'Unauthorized: Invalid bearer token' },
+      {
+        status: 401,
+        headers: { 'Cache-Control': 'no-store' },
+      },
+    )
+  }
+
+  return token
+}
+
+/**
  * 检查是否需要初始设置
  */
 export async function checkSetupRequired(context: any): Promise<boolean> {
   try {
-    const kvService = getKVService(context)
-    const authService = new AuthService(kvService)
+    const authService = new AuthService(getStoreService(context))
     return !(await authService.hasToken())
   } catch {
     return true
