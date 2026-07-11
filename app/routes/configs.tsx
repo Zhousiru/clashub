@@ -246,7 +246,7 @@ export default function Configs() {
       : yamlLanguageService === 'fallback'
         ? '基础 YAML 模式'
         : validationIssueCount === null
-          ? 'Mihomo 校验中…'
+          ? 'Mihomo 校验已启用'
           : validationIssueCount === 0
             ? 'Mihomo 校验通过'
             : `${validationIssueCount} 个 YAML 问题`
@@ -417,6 +417,7 @@ export default function Configs() {
                     height="100%"
                     language="yaml"
                     path={`file:///configs/${encodeURIComponent(selectedId)}.yaml`}
+                    saveViewState={false}
                     value={editorContent}
                     onChange={handleEditorChange}
                     onValidate={handleEditorValidation}
