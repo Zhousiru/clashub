@@ -94,7 +94,9 @@ export default function Settings() {
   const loaderData = useLoaderData<typeof loader>()
   const navigation = useNavigation()
   const successMessage = actionData?.success || loaderData.success
-  const isSubmitting = navigation.state !== 'idle'
+  const isChangingPassword =
+    navigation.state !== 'idle' &&
+    navigation.formData?.get('action') === 'change-password'
   const [formData, setFormData] = useState({
     newToken: '',
     confirmToken: '',
@@ -175,7 +177,7 @@ export default function Settings() {
                 <Button
                   type="submit"
                   disabled={
-                    isSubmitting ||
+                    isChangingPassword ||
                     !formData.newToken ||
                     !formData.confirmToken ||
                     formData.newToken !== formData.confirmToken ||
@@ -183,7 +185,7 @@ export default function Settings() {
                   }
                 >
                   <IconKey size={16} className="mr-2" />
-                  {isSubmitting ? '修改中…' : '修改密码'}
+                  {isChangingPassword ? '修改中…' : '修改密码'}
                 </Button>
                 <Button type="button" variant="secondary" onClick={handleReset}>
                   重置
