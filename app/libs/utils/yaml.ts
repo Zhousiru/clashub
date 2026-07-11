@@ -23,7 +23,7 @@ export function stringifyYaml(data: any): string {
       indent: 2,
       lineWidth: -1,
       noRefs: true,
-      quotingType: '"',
+      quoteStyle: 'double',
       forceQuotes: false,
     })
   } catch (error) {

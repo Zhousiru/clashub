@@ -2,6 +2,9 @@
   "name": "clashub",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.22.0"
+  },
   "scripts": {
     "build": "react-router build",
     "cf-typegen": "wrangler types",
@@ -13,31 +16,30 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
-    "@radix-ui/react-dialog": "^1.1.14",
-    "@radix-ui/react-label": "^2.1.7",
-    "@tabler/icons-react": "^3.34.1",
+    "@radix-ui/react-dialog": "^1.1.19",
+    "@radix-ui/react-label": "^2.1.11",
+    "@tabler/icons-react": "^3.44.0",
     "clsx": "^2.1.1",
-    "isbot": "^5.1.27",
-    "js-yaml": "^4.1.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "react-hot-toast": "^2.5.2",
-    "react-router": "^7.7.1",
-    "tailwind-merge": "^3.3.1"
+    "isbot": "^5.2.0",
+    "js-yaml": "^5.2.1",
+    "motion": "^12.42.2",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-hot-toast": "^2.6.0",
+    "react-router": "^8.2.0",
+    "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.0.12",
-    "@react-router/dev": "^7.7.1",
-    "@tailwindcss/vite": "^4.1.4",
-    "@types/js-yaml": "^4.0.9",
-    "@types/node": "^20",
-    "@types/react": "^19.1.2",
-    "@types/react-dom": "^19.1.2",
-    "tailwindcss": "^4.1.4",
-    "typescript": "^5.8.3",
-    "vite": "^7.1.1",
-    "vite-tsconfig-paths": "^5.1.4",
-    "wrangler": "^4.28.1"
+    "@cloudflare/vite-plugin": "^1.44.0",
+    "@react-router/dev": "^8.2.0",
+    "@tailwindcss/vite": "^4.3.2",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "tailwindcss": "^4.3.2",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.4",
+    "wrangler": "^4.110.0"
   },
-  "packageManager": "pnpm@9.11.0+sha512.0a203ffaed5a3f63242cd064c8fb5892366c103e328079318f78062f24ea8c9d50bc6a47aa3567cabefd824d170e78fa2745ed1f16b132e16436146b7688f19b"
+  "packageManager": "pnpm@11.11.0"
 }

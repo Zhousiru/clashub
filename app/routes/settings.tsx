@@ -1,10 +1,17 @@
-import { IconKey, IconShieldCheck } from '@tabler/icons-react'
-import { useState } from 'react'
-import { Form, redirect, useActionData, useLoaderData } from 'react-router'
+import { IconKey } from '@tabler/icons-react'
+import { useEffect, useState } from 'react'
+import {
+  Form,
+  redirect,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+} from 'react-router'
 import Layout from '~/components/Layout'
 import { Button } from '~/components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/Card'
 import { Input } from '~/components/ui/Input'
+import { notify } from '~/components/ui/notify'
+import { PageHeader, SectionHeader, Surface } from '~/components/ui/Workspace'
 import { AuthService, generateTokenCookie } from '~/libs/services/auth'
 import { getStoreService } from '~/libs/services/store'
 import { requireAuth } from '~/libs/utils/auth'
@@ -26,7 +33,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   await requireAuth(request, context)
   const url = new URL(request.url)
   const success = url.searchParams.get('success') === '1'
-  return success ? { success: '密码修改成功' } : {}
+  return { success: success ? '密码修改成功' : null }
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -85,7 +92,9 @@ export async function action({ request, context }: Route.ActionArgs) {
 export default function Settings() {
   const actionData = useActionData<ActionData>()
   const loaderData = useLoaderData<typeof loader>()
-  const successMessage = actionData?.success || (loaderData as any)?.success
+  const navigation = useNavigation()
+  const successMessage = actionData?.success || loaderData.success
+  const isSubmitting = navigation.state !== 'idle'
   const [formData, setFormData] = useState({
     newToken: '',
     confirmToken: '',
@@ -102,47 +111,22 @@ export default function Settings() {
     })
   }
 
+  useEffect(() => {
+    if (successMessage) notify.success(successMessage)
+    if (actionData?.error) notify.error(actionData.error)
+  }, [actionData, successMessage])
+
   return (
     <Layout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center h-16">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              Settings
-            </h1>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-              管理您的账户设置
-            </p>
-          </div>
-        </div>
+      <div className="space-y-8">
+        <PageHeader eyebrow="账户" title="设置" description="管理当前 Clashub 实例的访问密码。" />
 
-        {/* 成功/错误消息 */}
-        {successMessage && (
-          <div className="p-4 border border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
-            <div className="flex items-center">
-              <IconShieldCheck size={20} className="mr-2" />
-              {successMessage}
-            </div>
-          </div>
-        )}
-        {actionData?.error && (
-          <div className="p-4 border border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-            {actionData.error}
-          </div>
-        )}
-
-        {/* 修改密码 */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center space-x-2">
-              <IconKey size={20} />
-              <CardTitle>修改密码</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
+        <Surface className="max-w-2xl">
+          <SectionHeader title="访问密码" description="修改后请使用新密码登录。" />
+          <div className="p-5 sm:p-6">
             <Form
               method="post"
-              className="space-y-4"
+              className="max-w-md space-y-5"
               onSubmit={(e) => {
                 const isValid =
                   formData.newToken &&
@@ -187,10 +171,11 @@ export default function Settings() {
                 required
               />
 
-              <div className="flex space-x-2">
+              <div className="flex flex-col gap-2 pt-1 sm:flex-row">
                 <Button
                   type="submit"
                   disabled={
+                    isSubmitting ||
                     !formData.newToken ||
                     !formData.confirmToken ||
                     formData.newToken !== formData.confirmToken ||
@@ -198,15 +183,15 @@ export default function Settings() {
                   }
                 >
                   <IconKey size={16} className="mr-2" />
-                  修改密码
+                  {isSubmitting ? '修改中…' : '修改密码'}
                 </Button>
                 <Button type="button" variant="secondary" onClick={handleReset}>
                   重置
                 </Button>
               </div>
             </Form>
-          </CardContent>
-        </Card>
+          </div>
+        </Surface>
       </div>
     </Layout>
   )

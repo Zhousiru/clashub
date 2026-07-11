@@ -1,3 +1,5 @@
+import type { RouterContextProvider } from 'react-router'
+import { cloudflareContext } from '~/context'
 import type { Config, Fetcher, ProxyProvider } from '~/types'
 
 interface ValueResponse<T> {
@@ -203,10 +205,10 @@ export class StoreService {
   }
 }
 
-export function getStoreService(context: {
-  cloudflare: { env: Env }
-}): StoreService {
-  const namespace = context.cloudflare.env.STORE
+export function getStoreService(
+  context: Pick<RouterContextProvider, 'get'>,
+): StoreService {
+  const namespace = context.get(cloudflareContext).env.STORE
   if (!namespace) throw new Error('STORE Durable Object binding not found')
   return new StoreService(namespace.get(namespace.idFromName('global')))
 }

@@ -7,7 +7,6 @@ import {
   useSearchParams,
 } from 'react-router'
 import { Button } from '~/components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/Card'
 import { Input } from '~/components/ui/Input'
 import { AuthService, generateTokenCookie } from '~/libs/services/auth'
 import { getStoreService } from '~/libs/services/store'
@@ -110,20 +109,21 @@ export default function Login() {
     (urlError === 'invalid' ? '密码无效，请重新登录' : undefined)
 
   return (
-    <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">
-            {showSetup ? 'Setup Clashub' : 'Login to Clashub'}
-          </CardTitle>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+    <main className="grid min-h-dvh place-items-center bg-white px-5 py-12 dark:bg-black">
+      <section className="w-full max-w-sm">
+        <div className="mb-8">
+          <div className="mb-6 grid size-10 place-items-center rounded-[10px] bg-black text-sm font-bold text-white dark:bg-white dark:text-black">C</div>
+          <h1 className="text-2xl font-semibold tracking-[-0.025em] text-gray-950 dark:text-gray-50">
+            {showSetup ? '设置 Clashub' : '登录 Clashub'}
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-400">
             {showSetup
               ? '请设置您的访问密码，此密码将用于后续登录'
               : '请输入您的访问密码'}
           </p>
-        </CardHeader>
+        </div>
 
-        <CardContent>
+        <div>
           <Form method="post" className="space-y-4">
             <input
               type="hidden"
@@ -154,16 +154,9 @@ export default function Login() {
             </Button>
           </Form>
 
-          {showSetup && (
-            <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
-              <p className="text-xs text-gray-600 dark:text-gray-400">
-                <strong>注意：</strong>{' '}
-                请牢记您设置的密码，系统不支持密码找回功能。您可以在设置页面修改密码。
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+          {showSetup && <p className="mt-5 border-t border-gray-200 pt-5 text-xs leading-5 text-gray-500 dark:border-gray-800 dark:text-gray-400">请妥善保存密码。系统不支持找回，但可以在设置页修改。</p>}
+        </div>
+      </section>
+    </main>
   )
 }

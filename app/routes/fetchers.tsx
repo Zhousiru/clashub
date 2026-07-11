@@ -6,12 +6,24 @@ import {
   IconTrash,
 } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
-import { Form, useActionData, useLoaderData } from 'react-router'
+import {
+  Form,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+  useSubmit,
+} from 'react-router'
 import Layout from '~/components/Layout'
 import { Button } from '~/components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/Card'
+import {
+  ConfirmDialog,
+  DialogFooter,
+  ResponsiveDialog,
+} from '~/components/ui/Dialog'
 import { Input } from '~/components/ui/Input'
 import { List, ListContent, ListItem } from '~/components/ui/List'
+import { EmptyState, PageHeader, SectionHeader, Surface } from '~/components/ui/Workspace'
+import { notify } from '~/components/ui/notify'
 import { FetchersService } from '~/libs/services/clashub'
 import { getStoreService, StoreError } from '~/libs/services/store'
 import { requireAuth } from '~/libs/utils/auth'
@@ -28,6 +40,7 @@ export const meta: Route.MetaFunction = () => {
 interface ActionData {
   error?: string
   success?: string
+  intent?: string
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -55,18 +68,18 @@ export async function action({ request, context }: Route.ActionArgs) {
         const expectedRevision = Number(formData.get('revision'))
 
         if (!id || !url) {
-          return { error: '请填写所有必填字段' }
+          return { error: '请填写所有必填字段', intent: action }
         }
 
         if (action === 'add') {
           const fetcher = await fetchers.create(id, url)
-          return { success: `Fetcher "${fetcher.id}" 添加成功` }
+          return { success: `Fetcher "${fetcher.id}" 添加成功`, intent: action }
         } else {
           if (!Number.isInteger(expectedRevision)) {
-            return { error: '更新请求无效' }
+            return { error: '更新请求无效', intent: action }
           }
           const fetcher = await fetchers.update(id, url, expectedRevision)
-          return { success: `Fetcher "${fetcher.id}" 更新成功` }
+          return { success: `Fetcher "${fetcher.id}" 更新成功`, intent: action }
         }
       }
 
@@ -74,23 +87,27 @@ export async function action({ request, context }: Route.ActionArgs) {
         const id = formData.get('id') as string
         const expectedRevision = Number(formData.get('revision'))
         if (!id || !Number.isInteger(expectedRevision)) {
-          return { error: 'ID 不能为空' }
+          return { error: 'ID 不能为空', intent: action }
         }
 
         await fetchers.delete(id, expectedRevision)
 
-        return { success: `Fetcher "${id}" 删除成功` }
+        return { success: `Fetcher "${id}" 删除成功`, intent: action }
       }
 
       default:
-        return { error: '无效的操作' }
+        return { error: '无效的操作', intent: action }
     }
   } catch (error) {
     if (error instanceof StoreError && error.status === 409) {
-      return { error: 'Fetcher 已存在或已被其他请求更新，请刷新后重试' }
+      return {
+        error: 'Fetcher 已存在或已被其他请求更新，请刷新后重试',
+        intent: action,
+      }
     }
     return {
       error: error instanceof Error ? error.message : '操作失败',
+      intent: action,
     }
   }
 }
@@ -98,9 +115,14 @@ export async function action({ request, context }: Route.ActionArgs) {
 export default function Fetchers() {
   const { fetchers } = useLoaderData<typeof loader>()
   const actionData = useActionData<ActionData>()
+  const navigation = useNavigation()
+  const submit = useSubmit()
   const [editingFetcher, setEditingFetcher] = useState<Fetcher | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Fetcher | null>(null)
   const [formData, setFormData] = useState({ id: '', url: '' })
+  const pendingIntent = navigation.formData?.get('action')
+  const isMutating = navigation.state !== 'idle'
 
   const resetForm = () => {
     setFormData({ id: '', url: '' })
@@ -119,142 +141,146 @@ export default function Fetchers() {
     setShowForm(true)
   }
 
-  const copyApiUrl = (fetcherId: string) => {
+  const copyApiUrl = async (fetcherId: string) => {
     const url = `${window.location.origin}/api/v1/fetcher/${fetcherId}?token=YOUR_TOKEN`
-    navigator.clipboard.writeText(url)
+    try {
+      await navigator.clipboard.writeText(url)
+      notify.copied()
+    } catch {
+      notify.error('复制失败，请检查浏览器权限')
+    }
   }
 
   const openUrl = (url: string) => {
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
-  // 提交添加/更新成功后，自动清空并关闭表单
   useEffect(() => {
-    const message = actionData?.success
-    if (!message) return
-    if (message.includes('添加') || message.includes('更新')) {
+    if (actionData?.success) notify.success(actionData.success)
+    if (
+      actionData?.error &&
+      actionData.intent !== 'add' &&
+      actionData.intent !== 'edit'
+    ) {
+      notify.error(actionData.error)
+    }
+    if (
+      actionData?.success &&
+      ['add', 'edit'].includes(actionData.intent || '')
+    ) {
       resetForm()
     }
   }, [actionData])
 
   return (
     <Layout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center h-16">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              Fetcher Manager
-            </h1>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-              管理您的反向代理 URL
-            </p>
-          </div>
-          <Button onClick={handleAdd}>
+      <div className="space-y-8">
+        <PageHeader
+          eyebrow="资源"
+          title="抓取器"
+          description="管理反向代理目标，并使用现有操作打开或复制对应地址。"
+          action={<Button onClick={handleAdd}>
             <IconPlus size={16} className="mr-2" />
-            添加 Fetcher
-          </Button>
-        </div>
+            新建抓取器
+          </Button>}
+        />
 
-        {/* 成功/错误消息 */}
-        {actionData?.success && (
-          <div className="p-4 border border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
-            {actionData.success}
-          </div>
-        )}
-        {actionData?.error && (
-          <div className="p-4 border border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-            {actionData.error}
-          </div>
-        )}
-
-        {/* 添加/编辑表单 */}
-        {showForm && (
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {editingFetcher
-                  ? `编辑 Fetcher: ${editingFetcher.id}`
-                  : '添加新 Fetcher'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Form method="post" className="space-y-4">
+        <ResponsiveDialog
+          open={showForm}
+          onOpenChange={(open) => {
+            if (!open && !isMutating) resetForm()
+          }}
+          title={editingFetcher ? `编辑 ${editingFetcher.id}` : '新建抓取器'}
+          description="填写抓取器 ID 与目标地址。"
+        >
+          <Form method="post" className="space-y-4">
+            <input
+              type="hidden"
+              name="action"
+              value={editingFetcher ? 'edit' : 'add'}
+            />
+            {editingFetcher && (
+              <>
+                <input type="hidden" name="id" value={formData.id} />
                 <input
                   type="hidden"
-                  name="action"
-                  value={editingFetcher ? 'edit' : 'add'}
+                  name="revision"
+                  value={editingFetcher.revision}
                 />
-                {editingFetcher && (
-                  <>
-                    <input type="hidden" name="id" value={formData.id} />
-                    <input
-                      type="hidden"
-                      name="revision"
-                      value={editingFetcher.revision}
-                    />
-                  </>
-                )}
+              </>
+            )}
 
-                <Input
-                  label="Fetcher ID"
-                  name="id"
-                  value={formData.id}
-                  onChange={(e) =>
-                    setFormData({ ...formData, id: e.target.value })
-                  }
-                  placeholder="例如: my-fetcher"
-                  helperText="只能包含小写字母、数字、连字符和英文句点"
-                  disabled={!!editingFetcher}
-                  required
-                />
+            <Input
+              label="Fetcher ID"
+              name="id"
+              value={formData.id}
+              onChange={(e) => setFormData({ ...formData, id: e.target.value })}
+              placeholder="例如: my-fetcher"
+              helperText="只能包含小写字母、数字、连字符和英文句点"
+              disabled={!!editingFetcher}
+              autoFocus={!editingFetcher}
+              required
+            />
 
-                <Input
-                  label="Fetcher URL"
-                  name="url"
-                  type="url"
-                  value={formData.url}
-                  onChange={(e) =>
-                    setFormData({ ...formData, url: e.target.value })
-                  }
-                  placeholder="https://example.com/api/data"
-                  helperText="要反向代理的目标 URL"
-                  required
-                />
+            <Input
+              label="目标地址"
+              name="url"
+              type="url"
+              value={formData.url}
+              onChange={(e) =>
+                setFormData({ ...formData, url: e.target.value })
+              }
+              placeholder="https://example.com/api/data"
+              helperText="要反向代理的目标 URL"
+              autoFocus={!!editingFetcher}
+              required
+            />
 
-                <div className="flex space-x-2">
-                  <Button type="submit">
-                    {editingFetcher ? '更新' : '添加'}
-                  </Button>
-                  <Button type="button" variant="secondary" onClick={resetForm}>
-                    取消
-                  </Button>
-                </div>
-              </Form>
-            </CardContent>
-          </Card>
-        )}
+            {showForm &&
+              actionData?.error &&
+              (actionData.intent === 'add' || actionData.intent === 'edit') && (
+                <p
+                  role="alert"
+                  className="rounded-[10px] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+                >
+                  {actionData.error}
+                </p>
+              )}
 
-        {/* Fetcher 列表 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Fetchers ({fetchers.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={isMutating}
+                onClick={resetForm}
+              >
+                取消
+              </Button>
+              <Button type="submit" disabled={isMutating}>
+                {pendingIntent === 'add' || pendingIntent === 'edit'
+                  ? '处理中…'
+                  : editingFetcher
+                    ? '保存更改'
+                    : '创建抓取器'}
+              </Button>
+            </DialogFooter>
+          </Form>
+        </ResponsiveDialog>
+
+        <Surface>
+          <SectionHeader title="全部抓取器" count={fetchers.length} />
             {fetchers.length === 0 ? (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                <p>暂无 Fetcher</p>
-                <Button className="mt-4" onClick={handleAdd}>
+              <EmptyState title="暂无抓取器" description="创建第一个抓取器以开始管理反向代理目标。" action={<Button onClick={handleAdd}>
                   <IconPlus size={16} className="mr-2" />
-                  添加第一个 Fetcher
-                </Button>
-              </div>
+                  新建抓取器
+                </Button>} />
             ) : (
               <List>
                 {fetchers.map((fetcher) => (
                   <ListItem key={fetcher.id}>
                     <ListContent
                       title={fetcher.id}
-                      description={`更新于 ${new Date(fetcher.updatedAt).toLocaleString('zh-CN')}`}
+                      description={new Date(fetcher.updatedAt).toLocaleString('zh-CN')}
                       actions={
                         <div className="flex space-x-2">
                           <Button
@@ -262,6 +288,7 @@ export default function Fetchers() {
                             variant="secondary"
                             onClick={() => openUrl(fetcher.url)}
                             title="打开原始 URL"
+                            aria-label={`打开 ${fetcher.id} 的原始 URL`}
                           >
                             <IconExternalLink size={14} />
                           </Button>
@@ -270,6 +297,7 @@ export default function Fetchers() {
                             variant="secondary"
                             onClick={() => copyApiUrl(fetcher.id)}
                             title="复制 API URL"
+                            aria-label={`复制 ${fetcher.id} 的 API URL`}
                           >
                             <IconCopy size={14} />
                           </Button>
@@ -277,32 +305,22 @@ export default function Fetchers() {
                             size="sm"
                             variant="secondary"
                             onClick={() => handleEdit(fetcher)}
+                            title="编辑 Fetcher"
+                            aria-label={`编辑 ${fetcher.id}`}
                           >
                             <IconEdit size={14} />
                           </Button>
-                          <Form method="post" className="inline">
-                            <input type="hidden" name="action" value="delete" />
-                            <input type="hidden" name="id" value={fetcher.id} />
-                            <input
-                              type="hidden"
-                              name="revision"
-                              value={fetcher.revision}
-                            />
-                            <Button
-                              size="sm"
-                              variant="danger"
-                              type="submit"
-                              onClick={(e) => {
-                                if (
-                                  !confirm(`确定要删除 "${fetcher.id}" 吗？`)
-                                ) {
-                                  e.preventDefault()
-                                }
-                              }}
-                            >
-                              <IconTrash size={14} />
-                            </Button>
-                          </Form>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            type="button"
+                            disabled={isMutating}
+                            onClick={() => setDeleteTarget(fetcher)}
+                            title="删除 Fetcher"
+                            aria-label={`删除 ${fetcher.id}`}
+                          >
+                            <IconTrash size={14} />
+                          </Button>
                         </div>
                       }
                     />
@@ -310,8 +328,33 @@ export default function Fetchers() {
                 ))}
               </List>
             )}
-          </CardContent>
-        </Card>
+        </Surface>
+
+        <ConfirmDialog
+          open={deleteTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setDeleteTarget(null)
+          }}
+          title="删除 Fetcher？"
+          description={
+            deleteTarget
+              ? `“${deleteTarget.id}” 将被永久删除，此操作无法撤销。`
+              : ''
+          }
+          confirmLabel="删除 Fetcher"
+          pending={isMutating && pendingIntent === 'delete'}
+          onConfirm={() => {
+            if (!deleteTarget) return
+            submit(
+              {
+                action: 'delete',
+                id: deleteTarget.id,
+                revision: String(deleteTarget.revision),
+              },
+              { method: 'post' },
+            )
+          }}
+        />
       </div>
     </Layout>
   )

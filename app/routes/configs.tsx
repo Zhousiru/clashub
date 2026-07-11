@@ -1,17 +1,29 @@
 import Editor from '@monaco-editor/react'
 import {
+  IconChevronLeft,
   IconCopy,
   IconDeviceFloppy,
   IconPlus,
   IconTrash,
 } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
-import { Form, useActionData, useLoaderData, useNavigation } from 'react-router'
+import {
+  Form,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+  useSubmit,
+} from 'react-router'
 import Layout from '~/components/Layout'
 import { Button } from '~/components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/Card'
+import {
+  ConfirmDialog,
+  DialogFooter,
+  ResponsiveDialog,
+} from '~/components/ui/Dialog'
 import { Input } from '~/components/ui/Input'
 import { List, ListContent, ListItem } from '~/components/ui/List'
+import { notify } from '~/components/ui/notify'
 import { ConfigsService } from '~/libs/services/clashub'
 import { getStoreService, StoreError } from '~/libs/services/store'
 import { requireAuth } from '~/libs/utils/auth'
@@ -58,11 +70,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           return { error: '保存请求无效', intent }
         }
 
-        const config = await configs.update(
-          id,
-          content || '',
-          expectedRevision,
-        )
+        const config = await configs.update(id, content || '', expectedRevision)
 
         return {
           success: `Config "${config.id}" 保存成功`,
@@ -123,12 +131,16 @@ export default function Configs() {
   const { configs } = useLoaderData<typeof loader>()
   const actionData = useActionData<ActionData>()
   const navigation = useNavigation()
+  const submit = useSubmit()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedRevision, setSelectedRevision] = useState<number | null>(null)
   const [editorContent, setEditorContent] = useState('')
   const [lastSavedContent, setLastSavedContent] = useState('')
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newConfigId, setNewConfigId] = useState('')
+  const [pendingSelection, setPendingSelection] = useState<Config | null>(null)
+  const [pendingListReturn, setPendingListReturn] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Config | null>(null)
   const pendingIntent = navigation.formData?.get('action')
   const isMutating = navigation.state !== 'idle' && pendingIntent !== null
   const isSaving = isMutating && pendingIntent === 'save'
@@ -137,7 +149,16 @@ export default function Configs() {
 
   // 使用结构化操作响应更新对应配置，避免重复文案和跨配置响应污染状态。
   useEffect(() => {
-    if (!actionData || !('success' in actionData)) return
+    if (!actionData) return
+
+    if ('error' in actionData) {
+      if (actionData.intent !== 'create' || !showCreateForm) {
+        notify.error(actionData.error)
+      }
+      return
+    }
+
+    notify.success(actionData.success)
 
     if (actionData.intent === 'create') {
       setShowCreateForm(false)
@@ -176,250 +197,227 @@ export default function Configs() {
     setEditorContent(newContent)
   }
 
-  const handleConfigSelect = (config: Config) => {
-    if (isMutating) return
-    if (hasUnsavedChanges) {
-      if (!confirm('有未保存的更改，确定要切换配置吗？')) {
-        return
-      }
-    }
+  const selectConfig = (config: Config) => {
     setSelectedId(config.id)
     setSelectedRevision(config.revision)
     setEditorContent(config.content)
     setLastSavedContent(config.content)
   }
 
-  const copyApiUrl = (configId: string) => {
+  const handleConfigSelect = (config: Config) => {
+    if (isMutating) return
+    if (hasUnsavedChanges) {
+      setPendingSelection(config)
+      return
+    }
+    selectConfig(config)
+  }
+
+  const returnToList = () => {
+    if (hasUnsavedChanges) {
+      setPendingListReturn(true)
+      return
+    }
+    setSelectedId(null)
+  }
+
+  const copyApiUrl = async (configId: string) => {
     const url = `${window.location.origin}/api/v1/config/${configId}?token=YOUR_TOKEN`
-    navigator.clipboard.writeText(url)
+    try {
+      await navigator.clipboard.writeText(url)
+      notify.copied()
+    } catch {
+      notify.error('复制失败，请检查浏览器权限')
+    }
   }
 
   return (
-    <Layout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center h-16">
+    <Layout fluid>
+      <div className="flex min-h-[calc(100dvh-3.5rem)] flex-col md:min-h-dvh">
+        <header className="flex min-h-24 items-center justify-between gap-4 border-b border-gray-200 px-4 sm:px-6 md:px-8 dark:border-gray-800">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              Config Manager
-            </h1>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-              管理您的 YAML 配置文件
-            </p>
+            <p className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">工作区</p>
+            <h1 className="text-xl font-semibold tracking-[-0.02em]">配置</h1>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">管理 YAML 配置文件</p>
           </div>
           <Button disabled={isMutating} onClick={() => setShowCreateForm(true)}>
-            <IconPlus size={16} className="mr-2" />
-            创建 Config
+            <IconPlus size={16} />
+            新建配置
           </Button>
-        </div>
+        </header>
 
-        {/* 成功/错误消息 */}
-        {actionData && 'success' in actionData && (
-          <div className="p-4 border border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
-            {actionData.success}
-          </div>
-        )}
-        {actionData && 'error' in actionData && (
-          <div className="p-4 border border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-            {actionData.error}
-          </div>
-        )}
+        <ResponsiveDialog
+          open={showCreateForm}
+          onOpenChange={(open) => {
+            if (!open && !isMutating) {
+              setShowCreateForm(false)
+              setNewConfigId('')
+            }
+          }}
+          title="新建配置"
+          description="创建空配置后，可在编辑器中填写 YAML 内容。"
+        >
+          <Form method="post" className="space-y-4">
+            <input type="hidden" name="action" value="create" />
 
-        {/* 创建表单 */}
-        {showCreateForm && (
-          <Card>
-            <CardHeader>
-              <CardTitle>创建新配置</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Form method="post" className="space-y-4">
-                <input type="hidden" name="action" value="create" />
+            <Input
+              label="Config ID"
+              name="id"
+              value={newConfigId}
+              onChange={(e) => setNewConfigId(e.target.value)}
+              placeholder="例如: my-config"
+              helperText="只能包含小写字母、数字、连字符和英文句点"
+              disabled={isMutating}
+              autoFocus
+              required
+            />
 
-                <Input
-                  label="Config ID"
-                  name="id"
-                  value={newConfigId}
-                  onChange={(e) => setNewConfigId(e.target.value)}
-                  placeholder="例如: my-config"
-                  helperText="只能包含小写字母、数字、连字符和英文句点"
-                  disabled={isMutating}
-                  required
-                />
+            {showCreateForm &&
+              actionData &&
+              'error' in actionData &&
+              actionData.intent === 'create' && (
+                <p
+                  role="alert"
+                  className="rounded-[10px] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+                >
+                  {actionData.error}
+                </p>
+              )}
 
-                <div className="flex space-x-2">
-                  <Button type="submit" disabled={isMutating}>
-                    {pendingIntent === 'create' ? '创建中' : '创建'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={isMutating}
-                    onClick={() => {
-                      setShowCreateForm(false)
-                      setNewConfigId('')
-                    }}
-                  >
-                    取消
-                  </Button>
-                </div>
-              </Form>
-            </CardContent>
-          </Card>
-        )}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={isMutating}
+                onClick={() => {
+                  setShowCreateForm(false)
+                  setNewConfigId('')
+                }}
+              >
+                取消
+              </Button>
+              <Button type="submit" disabled={isMutating}>
+                {pendingIntent === 'create' ? '创建中…' : '创建配置'}
+              </Button>
+            </DialogFooter>
+          </Form>
+        </ResponsiveDialog>
 
-        {/* 双栏布局 */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* 左侧：Config 列表 */}
-          <div className="lg:col-span-1">
-            <Card>
-              <CardHeader>
-                <CardTitle>Configs ({configs.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {configs.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    <p className="text-sm">暂无配置</p>
-                  </div>
-                ) : (
-                  <List>
-                    {configs.map((config) => (
-                      <ListItem
-                        key={config.id}
-                        selected={selectedId === config.id}
-                        onSelect={() => handleConfigSelect(config)}
-                      >
-                        <ListContent
-                          title={config.id}
-                          description={`更新于 ${new Date(config.updatedAt).toLocaleDateString('zh-CN')}`}
-                          actions={
-                            <div className="flex space-x-1">
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  copyApiUrl(config.id)
-                                }}
-                              >
-                                <IconCopy size={12} />
-                              </Button>
-                              <Form method="post" className="inline">
-                                <input
-                                  type="hidden"
-                                  name="action"
-                                  value="delete"
-                                />
-                                <input
-                                  type="hidden"
-                                  name="id"
-                                  value={config.id}
-                                />
-                                <input
-                                  type="hidden"
-                                  name="revision"
-                                  value={config.revision}
-                                />
-                                <Button
-                                  size="sm"
-                                  variant="danger"
-                                  type="submit"
-                                  disabled={isMutating}
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    if (
-                                      !confirm(`确定要删除 "${config.id}" 吗？`)
-                                    ) {
-                                      e.preventDefault()
-                                    }
-                                  }}
-                                >
-                                  <IconTrash size={12} />
-                                </Button>
-                              </Form>
-                            </div>
-                          }
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* 右侧：编辑器 */}
-          <div className="lg:col-span-3">
-            <Card>
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <CardTitle>
-                    {selectedId
-                      ? `编辑: ${selectedId}`
-                      : '选择一个配置进行编辑'}
-                  </CardTitle>
-                  {selectedId && selectedRevision !== null && (
-                    <Form method="post">
-                      <input type="hidden" name="action" value="save" />
-                      <input type="hidden" name="id" value={selectedId} />
-                      <input
-                        type="hidden"
-                        name="revision"
-                        value={selectedRevision}
-                      />
-                      <input
-                        type="hidden"
-                        name="content"
-                        value={editorContent}
-                      />
-                      <Button
-                        type="submit"
-                        disabled={!hasUnsavedChanges || isMutating}
-                        variant={hasUnsavedChanges ? 'primary' : 'secondary'}
-                      >
-                        <IconDeviceFloppy size={16} className="mr-2" />
-                        {isSaving
-                          ? '保存中'
-                          : hasUnsavedChanges
-                            ? '保存更改'
-                            : '已保存'}
-                      </Button>
-                    </Form>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                {selectedId ? (
-                  <div className="h-96 border border-gray-200 dark:border-gray-800">
-                    <Editor
-                      height="100%"
-                      defaultLanguage="yaml"
-                      value={editorContent}
-                      onChange={handleEditorChange}
-                      theme="vs"
-                      options={{
-                        minimap: { enabled: false },
-                        fontSize: 14,
-                        lineNumbers: 'on',
-                        wordWrap: 'on',
-                        scrollBeyondLastLine: false,
-                        automaticLayout: true,
-                        tabSize: 2,
-                        insertSpaces: true,
-                        detectIndentation: false,
-                        readOnly: isMutating,
-                      }}
+        <div className="grid flex-1 md:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className={`${selectedId ? 'hidden md:block' : 'block'} border-r border-gray-200 dark:border-gray-800`}>
+            <div className="flex h-14 items-center justify-between border-b border-gray-200 px-5 dark:border-gray-800">
+              <h2 className="text-sm font-semibold">全部配置 <span className="ml-1 font-normal text-gray-500">{configs.length}</span></h2>
+            </div>
+            {configs.length === 0 ? (
+              <div className="px-5 py-10 text-sm text-gray-500">暂无配置</div>
+            ) : (
+              <List>
+                {configs.map((config) => (
+                  <ListItem key={config.id} selected={selectedId === config.id}>
+                    <ListContent
+                      title={config.id}
+                      description={new Date(config.updatedAt).toLocaleDateString('zh-CN')}
+                      onSelect={() => handleConfigSelect(config)}
+                      actions={<>
+                        <Button size="sm" variant="secondary" onClick={() => copyApiUrl(config.id)} title="复制 API URL" aria-label={`复制 ${config.id} 的 API URL`}><IconCopy size={14} /></Button>
+                        <Button size="sm" variant="danger" type="button" disabled={isMutating} onClick={() => setDeleteTarget(config)} title="删除配置" aria-label={`删除 ${config.id}`}><IconTrash size={14} /></Button>
+                      </>}
                     />
-                  </div>
-                ) : (
-                  <div className="h-96 flex items-center justify-center text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800">
-                    <div className="text-center">
-                      <p>请从左侧选择一个配置文件进行编辑</p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                  </ListItem>
+                ))}
+              </List>
+            )}
+          </aside>
+
+          <section className={`${selectedId ? 'flex' : 'hidden md:flex'} min-w-0 flex-col`}>
+            <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-3 py-2 sm:px-5 dark:border-gray-800">
+              <div className="flex min-w-0 items-center gap-2">
+                <button type="button" onClick={returnToList} className="grid size-10 shrink-0 place-items-center rounded-[10px] hover:bg-gray-100 md:hidden dark:hover:bg-gray-900" aria-label="返回配置列表"><IconChevronLeft size={19} /></button>
+                <div className="min-w-0">
+                  <h2 className="truncate text-sm font-medium">{selectedId || '选择配置'}</h2>
+                  {selectedId && <p className="mt-0.5 text-xs text-gray-500">{hasUnsavedChanges ? '有未保存的更改' : '已保存'}</p>}
+                </div>
+              </div>
+              {selectedId && selectedRevision !== null && (
+                <Form method="post">
+                  <input type="hidden" name="action" value="save" />
+                  <input type="hidden" name="id" value={selectedId} />
+                  <input type="hidden" name="revision" value={selectedRevision} />
+                  <input type="hidden" name="content" value={editorContent} />
+                  <Button type="submit" disabled={!hasUnsavedChanges || isMutating} variant={hasUnsavedChanges ? 'primary' : 'secondary'}>
+                    <IconDeviceFloppy size={16} />
+                    {isSaving ? '保存中…' : hasUnsavedChanges ? '保存' : '已保存'}
+                  </Button>
+                </Form>
+              )}
+            </div>
+            {selectedId ? (
+              <div className="min-h-[60dvh] flex-1 overflow-hidden bg-[#1e1e1e] md:min-h-0">
+                <Editor
+                  height="100%"
+                  defaultLanguage="yaml"
+                  value={editorContent}
+                  onChange={handleEditorChange}
+                  theme="vs-dark"
+                  options={{ minimap: { enabled: false }, fontSize: 14, lineNumbers: 'on', wordWrap: 'on', scrollBeyondLastLine: false, automaticLayout: true, tabSize: 2, insertSpaces: true, detectIndentation: false, readOnly: isMutating, padding: { top: 18, bottom: 18 } }}
+                />
+              </div>
+            ) : (
+              <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-gray-500">从左侧选择一个配置开始编辑</div>
+            )}
+          </section>
         </div>
+
+        <ConfirmDialog
+          open={pendingListReturn}
+          onOpenChange={setPendingListReturn}
+          title="放弃未保存的更改？"
+          description="当前 YAML 修改尚未保存。返回列表后，这些更改将丢失。"
+          confirmLabel="放弃并返回"
+          onConfirm={() => {
+            setSelectedId(null)
+            setPendingListReturn(false)
+          }}
+        />
+
+        <ConfirmDialog
+          open={pendingSelection !== null}
+          onOpenChange={(open) => {
+            if (!open) setPendingSelection(null)
+          }}
+          title="放弃未保存的更改？"
+          description="当前 YAML 修改尚未保存。切换配置后，这些更改将丢失。"
+          confirmLabel="放弃并切换"
+          onConfirm={() => {
+            if (pendingSelection) selectConfig(pendingSelection)
+          }}
+        />
+
+        <ConfirmDialog
+          open={deleteTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setDeleteTarget(null)
+          }}
+          title="删除 Config？"
+          description={
+            deleteTarget
+              ? `“${deleteTarget.id}” 及其 YAML 内容将被永久删除，此操作无法撤销。`
+              : ''
+          }
+          confirmLabel="删除 Config"
+          pending={isMutating && pendingIntent === 'delete'}
+          onConfirm={() => {
+            if (!deleteTarget) return
+            submit(
+              {
+                action: 'delete',
+                id: deleteTarget.id,
+                revision: String(deleteTarget.revision),
+              },
+              { method: 'post' },
+            )
+          }}
+        />
       </div>
     </Layout>
   )

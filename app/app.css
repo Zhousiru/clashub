@@ -1,25 +1,35 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 @theme {
   --font-sans:
-    'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
-    'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 
-  /* Retro design theme - no rounded corners */
+  /* Product radii */
   --radius-none: 0px;
-  --radius-sm: 0px;
-  --radius-md: 0px;
-  --radius-lg: 0px;
-  --radius-xl: 0px;
-  --radius-2xl: 0px;
-  --radius-3xl: 0px;
-  --radius-full: 0px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 10px;
+  --radius-2xl: 20px;
+  --radius-3xl: 20px;
+  --radius-full: 9999px;
+}
+
+:root {
+  --z-dropdown: 30;
+  --z-sticky: 40;
+  --z-modal-backdrop: 50;
+  --z-modal: 60;
+  --z-toast: 70;
+  --z-tooltip: 80;
 }
 
 /* Global styles */
 html,
 body {
-  @apply bg-white text-black;
+  @apply min-h-full bg-white text-black antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 
   @media (prefers-color-scheme: dark) {
     @apply bg-black text-white;
@@ -27,18 +37,53 @@ body {
   }
 }
 
-/* Remove all border radius */
-* {
-  border-radius: 0 !important;
+::selection {
+  @apply bg-black text-white dark:bg-white dark:text-black;
 }
 
 /* Base component styles */
 .button {
-  @apply border transition-colors duration-200;
-  border-radius: 0;
+  @apply inline-flex min-h-10 items-center justify-center border transition-[background-color,border-color,color,transform] duration-150 disabled:cursor-not-allowed disabled:opacity-50;
 }
 
 .input {
-  @apply border border-gray-300 bg-white text-black focus:border-black focus:outline-none;
-  border-radius: 0;
+  @apply min-h-11 rounded-[10px] border border-gray-300 bg-white text-black placeholder:text-gray-500 hover:border-gray-400 focus:border-black focus:outline-2 focus:outline-offset-2 focus:outline-black disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 dark:border-gray-700 dark:bg-black dark:text-white dark:placeholder:text-gray-500 dark:hover:border-gray-600 dark:focus:border-white dark:focus:outline-white dark:disabled:bg-gray-900;
+}
+
+.dialog-backdrop {
+  z-index: var(--z-modal-backdrop);
+}
+
+.dialog-layer {
+  z-index: var(--z-modal);
+}
+
+[data-rht-toaster] {
+  z-index: var(--z-toast) !important;
+}
+
+.mobile-nav-scroll {
+  scrollbar-width: none;
+}
+
+.mobile-nav-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

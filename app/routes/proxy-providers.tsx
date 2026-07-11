@@ -1,11 +1,23 @@
 import { IconCopy, IconEdit, IconPlus, IconTrash } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
-import { Form, useActionData, useLoaderData } from 'react-router'
+import {
+  Form,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+  useSubmit,
+} from 'react-router'
 import Layout from '~/components/Layout'
 import { Button } from '~/components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/Card'
+import {
+  ConfirmDialog,
+  DialogFooter,
+  ResponsiveDialog,
+} from '~/components/ui/Dialog'
 import { Input } from '~/components/ui/Input'
 import { List, ListContent, ListItem } from '~/components/ui/List'
+import { EmptyState, PageHeader, SectionHeader, Surface } from '~/components/ui/Workspace'
+import { notify } from '~/components/ui/notify'
 import { ProxyProvidersService } from '~/libs/services/clashub'
 import { getStoreService, StoreError } from '~/libs/services/store'
 import { requireAuth } from '~/libs/utils/auth'
@@ -22,6 +34,7 @@ export const meta: Route.MetaFunction = () => {
 interface ActionData {
   error?: string
   success?: string
+  intent?: string
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -51,22 +64,28 @@ export async function action({ request, context }: Route.ActionArgs) {
         const expectedRevision = Number(formData.get('revision'))
 
         if (!id || !subscriptionUrl) {
-          return { error: '请填写所有必填字段' }
+          return { error: '请填写所有必填字段', intent: action }
         }
 
         if (action === 'add') {
           const provider = await providers.create(id, subscriptionUrl)
-          return { success: `Proxy Provider "${provider.id}" 添加成功` }
+          return {
+            success: `Proxy Provider "${provider.id}" 添加成功`,
+            intent: action,
+          }
         } else {
           if (!Number.isInteger(expectedRevision)) {
-            return { error: '更新请求无效' }
+            return { error: '更新请求无效', intent: action }
           }
           const provider = await providers.update(
             id,
             subscriptionUrl,
             expectedRevision,
           )
-          return { success: `Proxy Provider "${provider.id}" 更新成功` }
+          return {
+            success: `Proxy Provider "${provider.id}" 更新成功`,
+            intent: action,
+          }
         }
       }
 
@@ -74,23 +93,27 @@ export async function action({ request, context }: Route.ActionArgs) {
         const id = formData.get('id') as string
         const expectedRevision = Number(formData.get('revision'))
         if (!id || !Number.isInteger(expectedRevision)) {
-          return { error: 'ID 不能为空' }
+          return { error: 'ID 不能为空', intent: action }
         }
 
         await providers.delete(id, expectedRevision)
 
-        return { success: `Proxy Provider "${id}" 删除成功` }
+        return { success: `Proxy Provider "${id}" 删除成功`, intent: action }
       }
 
       default:
-        return { error: '无效的操作' }
+        return { error: '无效的操作', intent: action }
     }
   } catch (error) {
     if (error instanceof StoreError && error.status === 409) {
-      return { error: 'Provider 已存在或已被其他请求更新，请刷新后重试' }
+      return {
+        error: 'Provider 已存在或已被其他请求更新，请刷新后重试',
+        intent: action,
+      }
     }
     return {
       error: error instanceof Error ? error.message : '操作失败',
+      intent: action,
     }
   }
 }
@@ -98,11 +121,16 @@ export async function action({ request, context }: Route.ActionArgs) {
 export default function ProxyProviders() {
   const { providers } = useLoaderData<typeof loader>()
   const actionData = useActionData<ActionData>()
+  const navigation = useNavigation()
+  const submit = useSubmit()
   const [editingProvider, setEditingProvider] = useState<ProxyProvider | null>(
     null,
   )
   const [showForm, setShowForm] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<ProxyProvider | null>(null)
   const [formData, setFormData] = useState({ id: '', subscriptionUrl: '' })
+  const pendingIntent = navigation.formData?.get('action')
+  const isMutating = navigation.state !== 'idle'
 
   const resetForm = () => {
     setFormData({ id: '', subscriptionUrl: '' })
@@ -110,11 +138,21 @@ export default function ProxyProviders() {
     setShowForm(false)
   }
 
-  // 提交添加/更新成功后，自动清空并关闭表单
   useEffect(() => {
-    const message = actionData?.success
-    if (!message) return
-    if (message.includes('添加') || message.includes('更新')) {
+    if (actionData?.success) {
+      notify.success(actionData.success)
+    }
+    if (
+      actionData?.error &&
+      actionData.intent !== 'add' &&
+      actionData.intent !== 'edit'
+    ) {
+      notify.error(actionData.error)
+    }
+    if (
+      actionData?.success &&
+      ['add', 'edit'].includes(actionData.intent || '')
+    ) {
       resetForm()
     }
   }, [actionData])
@@ -130,174 +168,158 @@ export default function ProxyProviders() {
     setShowForm(true)
   }
 
-  const copyApiUrl = (sourceId: string) => {
+  const copyApiUrl = async (sourceId: string) => {
     const url = `${window.location.origin}/api/v1/proxy-provider/${sourceId}?token=YOUR_TOKEN`
-    navigator.clipboard.writeText(url)
+    try {
+      await navigator.clipboard.writeText(url)
+      notify.copied()
+    } catch {
+      notify.error('复制失败，请检查浏览器权限')
+    }
   }
 
   return (
     <Layout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center h-16">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              Proxy Provider Manager
-            </h1>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-              管理您的 Clash 订阅链接
-            </p>
-          </div>
-          <Button onClick={handleAdd}>
+      <div className="space-y-8">
+        <PageHeader
+          eyebrow="资源"
+          title="代理提供商"
+          description="管理 Clash 订阅来源，并复制已有资源对应的 API 地址。"
+          action={<Button onClick={handleAdd}>
             <IconPlus size={16} className="mr-2" />
-            添加 Provider
-          </Button>
-        </div>
+            新建提供商
+          </Button>}
+        />
 
-        {/* 成功/错误消息 */}
-        {actionData?.success && (
-          <div className="p-4 border border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
-            {actionData.success}
-          </div>
-        )}
-        {actionData?.error && (
-          <div className="p-4 border border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-            {actionData.error}
-          </div>
-        )}
-
-        {/* 添加/编辑表单 */}
-        {showForm && (
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {editingProvider
-                  ? `编辑 Provider: ${editingProvider.id}`
-                  : '添加新 Provider'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Form method="post" className="space-y-4">
+        <ResponsiveDialog
+          open={showForm}
+          onOpenChange={(open) => {
+            if (!open && !isMutating) resetForm()
+          }}
+          title={editingProvider ? `编辑 ${editingProvider.id}` : '新建代理提供商'}
+          description="填写来源 ID 与订阅地址。"
+        >
+          <Form method="post" className="space-y-4">
+            <input
+              type="hidden"
+              name="action"
+              value={editingProvider ? 'edit' : 'add'}
+            />
+            {editingProvider && (
+              <>
+                <input type="hidden" name="id" value={formData.id} />
                 <input
                   type="hidden"
-                  name="action"
-                  value={editingProvider ? 'edit' : 'add'}
+                  name="revision"
+                  value={editingProvider.revision}
                 />
-                {editingProvider && (
-                  <>
-                    <input type="hidden" name="id" value={formData.id} />
-                    <input
-                      type="hidden"
-                      name="revision"
-                      value={editingProvider.revision}
-                    />
-                  </>
-                )}
+              </>
+            )}
 
-                <Input
-                  label="Source ID"
-                  name="id"
-                  value={formData.id}
-                  onChange={(e) =>
-                    setFormData({ ...formData, id: e.target.value })
-                  }
-                  placeholder="例如: my-provider"
-                  helperText="只能包含小写字母、数字、连字符和英文句点"
-                  disabled={!!editingProvider}
-                  required
-                />
+            <Input
+              label="Source ID"
+              name="id"
+              value={formData.id}
+              onChange={(e) => setFormData({ ...formData, id: e.target.value })}
+              placeholder="例如: my-provider"
+              helperText="只能包含小写字母、数字、连字符和英文句点"
+              disabled={!!editingProvider}
+              autoFocus={!editingProvider}
+              required
+            />
 
-                <Input
-                  label="Subscription URL"
-                  name="subscriptionUrl"
-                  type="url"
-                  value={formData.subscriptionUrl}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      subscriptionUrl: e.target.value,
-                    })
-                  }
-                  placeholder="https://example.com/clash/config"
-                  required
-                />
+            <Input
+              label="订阅地址"
+              name="subscriptionUrl"
+              type="url"
+              value={formData.subscriptionUrl}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  subscriptionUrl: e.target.value,
+                })
+              }
+              placeholder="https://example.com/clash/config"
+              autoFocus={!!editingProvider}
+              required
+            />
 
-                <div className="flex space-x-2">
-                  <Button type="submit">
-                    {editingProvider ? '更新' : '添加'}
-                  </Button>
-                  <Button type="button" variant="secondary" onClick={resetForm}>
-                    取消
-                  </Button>
-                </div>
-              </Form>
-            </CardContent>
-          </Card>
-        )}
+            {showForm &&
+              actionData?.error &&
+              (actionData.intent === 'add' || actionData.intent === 'edit') && (
+                <p
+                  role="alert"
+                  className="rounded-[10px] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+                >
+                  {actionData.error}
+                </p>
+              )}
 
-        {/* Provider 列表 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Proxy Providers ({providers.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={isMutating}
+                onClick={resetForm}
+              >
+                取消
+              </Button>
+              <Button type="submit" disabled={isMutating}>
+                {pendingIntent === 'add' || pendingIntent === 'edit'
+                  ? '处理中…'
+                  : editingProvider
+                    ? '保存更改'
+                    : '创建提供商'}
+              </Button>
+            </DialogFooter>
+          </Form>
+        </ResponsiveDialog>
+
+        <Surface>
+          <SectionHeader title="全部提供商" count={providers.length} />
             {providers.length === 0 ? (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                <p>暂无 Proxy Provider</p>
-                <Button className="mt-4" onClick={handleAdd}>
+              <EmptyState title="暂无代理提供商" description="创建第一个提供商以开始管理订阅来源。" action={<Button onClick={handleAdd}>
                   <IconPlus size={16} className="mr-2" />
-                  添加第一个 Provider
-                </Button>
-              </div>
+                  新建提供商
+                </Button>} />
             ) : (
               <List>
                 {providers.map((provider) => (
                   <ListItem key={provider.id}>
                     <ListContent
                       title={provider.id}
-                      description={`更新于 ${new Date(provider.updatedAt).toLocaleString('zh-CN')}`}
+                      description={new Date(provider.updatedAt).toLocaleString('zh-CN')}
                       actions={
                         <div className="flex space-x-2">
                           <Button
                             size="sm"
                             variant="secondary"
                             onClick={() => copyApiUrl(provider.id)}
+                            aria-label={`复制 ${provider.id} 的 API URL`}
+                            title="复制 API URL"
                           >
-                            <IconCopy size={14} />
+                            <IconCopy size={15} />
                           </Button>
                           <Button
                             size="sm"
                             variant="secondary"
                             onClick={() => handleEdit(provider)}
+                            aria-label={`编辑 ${provider.id}`}
+                            title="编辑 Provider"
                           >
-                            <IconEdit size={14} />
+                            <IconEdit size={15} />
                           </Button>
-                          <Form method="post" className="inline">
-                            <input type="hidden" name="action" value="delete" />
-                            <input
-                              type="hidden"
-                              name="id"
-                              value={provider.id}
-                            />
-                            <input
-                              type="hidden"
-                              name="revision"
-                              value={provider.revision}
-                            />
-                            <Button
-                              size="sm"
-                              variant="danger"
-                              type="submit"
-                              onClick={(e) => {
-                                if (
-                                  !confirm(`确定要删除 "${provider.id}" 吗？`)
-                                ) {
-                                  e.preventDefault()
-                                }
-                              }}
-                            >
-                              <IconTrash size={14} />
-                            </Button>
-                          </Form>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            type="button"
+                            disabled={isMutating}
+                            onClick={() => setDeleteTarget(provider)}
+                            aria-label={`删除 ${provider.id}`}
+                            title="删除 Provider"
+                          >
+                            <IconTrash size={15} />
+                          </Button>
                         </div>
                       }
                     />
@@ -305,8 +327,33 @@ export default function ProxyProviders() {
                 ))}
               </List>
             )}
-          </CardContent>
-        </Card>
+        </Surface>
+
+        <ConfirmDialog
+          open={deleteTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setDeleteTarget(null)
+          }}
+          title="删除 Proxy Provider？"
+          description={
+            deleteTarget
+              ? `“${deleteTarget.id}” 将被永久删除，此操作无法撤销。`
+              : ''
+          }
+          confirmLabel="删除 Provider"
+          pending={isMutating && pendingIntent === 'delete'}
+          onConfirm={() => {
+            if (!deleteTarget) return
+            submit(
+              {
+                action: 'delete',
+                id: deleteTarget.id,
+                revision: String(deleteTarget.revision),
+              },
+              { method: 'post' },
+            )
+          }}
+        />
       </div>
     </Layout>
   )

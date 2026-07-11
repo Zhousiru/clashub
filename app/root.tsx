@@ -6,8 +6,10 @@ import {
   Scripts,
   ScrollRestoration,
 } from 'react-router'
+import { domMax, LazyMotion, MotionConfig } from 'motion/react'
 
 import type { Route } from './+types/root'
+import { AppToaster } from './components/ui/Toast'
 import './app.css'
 
 export const links: Route.LinksFunction = () => [
@@ -25,7 +27,7 @@ export const links: Route.LinksFunction = () => [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -33,7 +35,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        {children}
+        <LazyMotion features={domMax} strict>
+          <MotionConfig
+            reducedMotion="user"
+            transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
+          >
+            {children}
+            <AppToaster />
+          </MotionConfig>
+        </LazyMotion>
         <ScrollRestoration />
         <Scripts />
       </body>

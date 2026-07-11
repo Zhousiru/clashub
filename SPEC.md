@@ -100,4 +100,28 @@ Authorization: Bearer <token>
 
 ## 设计风格
 
-现代简洁 Retro 风格，黑 / 白 / 灰配色（参考 Vercel），圆角半径 0px（无圆角设计元素）。不要使用大面积渐变色
+采用 Vercel-like 的现代、克制工具界面，以黑 / 白 / 灰为主色，语义红绿只用于错误、危险与成功状态。控件和普通容器使用 10px 圆角，modal 与移动端 bottom sheet 使用 20px 圆角；主要布局节奏为 28–32px，局部表单和列表节奏为 12–16px。阴影只用于 toast、dialog、浮层或关键聚焦状态，最大模糊半径为 8px。优先通过排版、留白和 1px 分隔线建立层级，尽可能少用 card，禁止 card 嵌套 card。不要使用大面积渐变、玻璃拟态、夸张装饰或典型 SaaS 营销式视觉。完整规范见 `PRODUCT.md` 与 `DESIGN.md`。
+
+桌面端使用持久侧边导航，资源页为连续单栏工作区，Config 为列表 + Monaco 的连续双栏工作区；移动端使用底部导航，Config 采用列表 → 编辑器层级，定位为查看、复制和必要的小范围编辑。UI 改写不得新增功能、服务端字段、状态推断或信息展示，也不得改变现有 API、鉴权与资源操作。
+
+### 反馈系统
+
+- 字段格式、必填和字段级服务端错误使用贴近字段的 inline error。
+- 与局部工作区强相关、需要持续显示的信息使用 inline message。
+- 保存、复制、创建等无需用户决策的短暂结果使用 toast；右上角最多同时显示 3 条，默认 4 秒后关闭，hover 或键盘聚焦时暂停。
+- 无合适页面落点的后台失败使用持久 error toast，并提供重试或关闭操作。
+- 删除、未保存更改、首次设置等会阻断流程或产生不可逆结果的决策使用 dialog/modal。
+- 禁止使用浏览器原生 `alert()`、`confirm()` 或 `prompt()` 作为正式产品反馈。
+- toast 需要合适的 live region；dialog 需要标题、初始焦点、焦点锁定、Escape 关闭与关闭后的焦点归还。
+
+### 动画系统
+
+使用 `motion/react` 处理列表重排、表单显隐、toast、dialog、选择指示器和图标状态切换。普通 hover、focus 和颜色变化继续使用 CSS。
+
+- 点击和图标切换：100–140ms。
+- toast 进入 180ms、退出 140ms；使用淡入和不超过 6px 的短位移。
+- 表单展开 200–240ms；dialog 遮罩 160ms、面板 200ms。
+- Provider、Config、Fetcher 增删使用 `layout` 与 `AnimatePresence`，让其余条目在 180–240ms 内补位。
+- Config 选择指示器可使用 `layoutId`；禁止动画 Monaco 编辑器本体或通过 key 强制其重新挂载。
+- 统一缓动为 `cubic-bezier(0.25, 1, 0.5, 1)`，禁止 bounce、elastic 和夸张 spring。
+- 根级 Motion 配置使用 `reducedMotion="user"`，尊重 `prefers-reduced-motion`。
