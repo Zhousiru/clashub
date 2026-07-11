@@ -24,7 +24,7 @@
     "isbot": "^5.2.0",
     "js-yaml": "^5.2.1",
     "meta-json-schema": "1.19.27",
-    "monaco-editor": "~0.54.0",
+    "monaco-editor": "^0.55.1",
     "monaco-yaml": "^5.5.1",
     "motion": "^12.42.2",
     "react": "^19.2.7",
