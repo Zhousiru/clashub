@@ -27,7 +27,7 @@ export function initializeMonacoYaml() {
       {
         fileMatch: ['**/*.yaml', '**/*.yml'],
         schema: mihomoSchema,
-        uri: 'https://clashub.local/schemas/mihomo-1.19.27.json',
+        uri: 'inmemory://clashub/schemas/mihomo-1.19.27.json',
       },
     ],
     yamlVersion: '1.2',
