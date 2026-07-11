@@ -1,5 +1,4 @@
 import * as yaml from 'js-yaml'
-import type { ClashConfig } from '~/types'
 
 /**
  * 解析 YAML 字符串
@@ -29,34 +28,6 @@ export function stringifyYaml(data: any): string {
   } catch (error) {
     throw new Error(
       `YAML 序列化失败: ${error instanceof Error ? error.message : '未知错误'}`
-    )
-  }
-}
-
-/**
- * 从 Clash 配置中提取 proxies 块
- */
-export function extractProxiesFromClash(yamlContent: string): string {
-  try {
-    const config = parseYaml(yamlContent) as ClashConfig
-
-    if (!config || typeof config !== 'object') {
-      throw new Error('无效的 YAML 配置')
-    }
-
-    if (!config.proxies || !Array.isArray(config.proxies)) {
-      throw new Error('配置中未找到有效的 proxies 块')
-    }
-
-    // 返回只包含 proxies 的新配置
-    const result = {
-      proxies: config.proxies,
-    }
-
-    return stringifyYaml(result)
-  } catch (error) {
-    throw new Error(
-      `提取 proxies 失败: ${error instanceof Error ? error.message : '未知错误'}`
     )
   }
 }

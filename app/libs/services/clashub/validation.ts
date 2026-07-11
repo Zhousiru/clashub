@@ -29,3 +29,36 @@ export function requireRevision(value: unknown): number {
   }
   return value as number
 }
+
+export function requireProxyRenameRule(
+  pattern: unknown,
+  replacement: unknown,
+): { renamePattern: string; renameReplacement: string } {
+  const renamePattern =
+    pattern === undefined ? '' : requireString(pattern, 'renamePattern')
+  const renameReplacement =
+    replacement === undefined
+      ? ''
+      : requireString(replacement, 'renameReplacement')
+
+  if (renamePattern.length > 256) {
+    throw new ValidationError('renamePattern 不能超过 256 个字符')
+  }
+  if (renameReplacement.length > 512) {
+    throw new ValidationError('renameReplacement 不能超过 512 个字符')
+  }
+
+  if (renamePattern) {
+    try {
+      new RegExp(renamePattern, 'g')
+    } catch (error) {
+      throw new ValidationError(
+        `renamePattern 不是有效的正则表达式: ${
+          error instanceof Error ? error.message : '未知错误'
+        }`,
+      )
+    }
+  }
+
+  return { renamePattern, renameReplacement }
+}

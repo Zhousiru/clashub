@@ -64,6 +64,8 @@ export async function action({ request, context, params }: Route.ActionArgs) {
             value: await new ProxyProvidersService(store).create(
               body.id,
               body.subscriptionUrl,
+              body.renamePattern,
+              body.renameReplacement,
             ),
           },
           201,

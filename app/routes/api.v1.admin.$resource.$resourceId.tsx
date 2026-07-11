@@ -98,6 +98,8 @@ export async function action({ request, context, params }: Route.ActionArgs) {
             params.resourceId,
             body.subscriptionUrl,
             body.expectedRevision,
+            body.renamePattern,
+            body.renameReplacement,
           ),
         })
       case 'fetchers':

@@ -122,11 +122,17 @@ export class StoreService {
   async createProxyProvider(
     id: string,
     subscriptionUrl: string,
+    renamePattern: string,
+    renameReplacement: string,
   ): Promise<ProxyProvider> {
     return (
       await this.request<ValueResponse<ProxyProvider>>(
         `/proxy-providers/${encodeURIComponent(id)}`,
-        this.json('POST', { subscriptionUrl }),
+        this.json('POST', {
+          subscriptionUrl,
+          renamePattern,
+          renameReplacement,
+        }),
       )
     ).value
   }
@@ -135,11 +141,18 @@ export class StoreService {
     id: string,
     subscriptionUrl: string,
     expectedRevision: number,
+    renamePattern: string,
+    renameReplacement: string,
   ): Promise<ProxyProvider> {
     return (
       await this.request<ValueResponse<ProxyProvider>>(
         `/proxy-providers/${encodeURIComponent(id)}`,
-        this.json('PUT', { subscriptionUrl, expectedRevision }),
+        this.json('PUT', {
+          subscriptionUrl,
+          expectedRevision,
+          renamePattern,
+          renameReplacement,
+        }),
       )
     ).value
   }

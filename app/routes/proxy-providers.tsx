@@ -61,6 +61,8 @@ export async function action({ request, context }: Route.ActionArgs) {
       case 'edit': {
         const id = formData.get('id') as string
         const subscriptionUrl = formData.get('subscriptionUrl') as string
+        const renamePattern = formData.get('renamePattern') as string
+        const renameReplacement = formData.get('renameReplacement') as string
         const expectedRevision = Number(formData.get('revision'))
 
         if (!id || !subscriptionUrl) {
@@ -68,7 +70,12 @@ export async function action({ request, context }: Route.ActionArgs) {
         }
 
         if (action === 'add') {
-          const provider = await providers.create(id, subscriptionUrl)
+          const provider = await providers.create(
+            id,
+            subscriptionUrl,
+            renamePattern,
+            renameReplacement,
+          )
           return {
             success: `Proxy Provider "${provider.id}" 添加成功`,
             intent: action,
@@ -81,6 +88,8 @@ export async function action({ request, context }: Route.ActionArgs) {
             id,
             subscriptionUrl,
             expectedRevision,
+            renamePattern,
+            renameReplacement,
           )
           return {
             success: `Proxy Provider "${provider.id}" 更新成功`,
@@ -128,12 +137,22 @@ export default function ProxyProviders() {
   )
   const [showForm, setShowForm] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ProxyProvider | null>(null)
-  const [formData, setFormData] = useState({ id: '', subscriptionUrl: '' })
+  const [formData, setFormData] = useState({
+    id: '',
+    subscriptionUrl: '',
+    renamePattern: '',
+    renameReplacement: '',
+  })
   const pendingIntent = navigation.formData?.get('action')
   const isMutating = navigation.state !== 'idle'
 
   const resetForm = () => {
-    setFormData({ id: '', subscriptionUrl: '' })
+    setFormData({
+      id: '',
+      subscriptionUrl: '',
+      renamePattern: '',
+      renameReplacement: '',
+    })
     setEditingProvider(null)
     setShowForm(false)
   }
@@ -158,7 +177,12 @@ export default function ProxyProviders() {
   }, [actionData])
 
   const handleEdit = (provider: ProxyProvider) => {
-    setFormData({ id: provider.id, subscriptionUrl: provider.subscriptionUrl })
+    setFormData({
+      id: provider.id,
+      subscriptionUrl: provider.subscriptionUrl,
+      renamePattern: provider.renamePattern ?? '',
+      renameReplacement: provider.renameReplacement ?? '',
+    })
     setEditingProvider(provider)
     setShowForm(true)
   }
@@ -167,6 +191,17 @@ export default function ProxyProviders() {
     resetForm()
     setShowForm(true)
   }
+
+  const renamePatternError = (() => {
+    if (!formData.renamePattern) return undefined
+    if (formData.renamePattern.length > 256) return '正则不能超过 256 个字符'
+    try {
+      new RegExp(formData.renamePattern, 'g')
+      return undefined
+    } catch {
+      return '请输入有效的 JavaScript 正则表达式'
+    }
+  })()
 
   const copyApiUrl = async (sourceId: string) => {
     const url = `${window.location.origin}/api/v1/proxy-provider/${sourceId}?token=YOUR_TOKEN`
@@ -197,7 +232,7 @@ export default function ProxyProviders() {
             if (!open && !isMutating) resetForm()
           }}
           title={editingProvider ? `编辑 ${editingProvider.id}` : '新建代理提供商'}
-          description="填写来源 ID 与订阅地址。"
+          description="填写订阅来源，并可选择用正则统一整理节点名称。"
         >
           <Form method="post" className="space-y-4">
             <input
@@ -226,6 +261,33 @@ export default function ProxyProviders() {
               disabled={!!editingProvider}
               autoFocus={!editingProvider}
               required
+            />
+
+            <Input
+              label="节点名称匹配正则"
+              name="renamePattern"
+              value={formData.renamePattern}
+              onChange={(e) =>
+                setFormData({ ...formData, renamePattern: e.target.value })
+              }
+              placeholder="例如: ^(.*?)\s+-\s+(.*)$"
+              helperText="留空表示不改名；默认全局匹配并区分大小写"
+              error={renamePatternError}
+              maxLength={256}
+              spellCheck={false}
+            />
+
+            <Input
+              label="节点名称替换模板"
+              name="renameReplacement"
+              value={formData.renameReplacement}
+              onChange={(e) =>
+                setFormData({ ...formData, renameReplacement: e.target.value })
+              }
+              placeholder="例如: $1 · $2"
+              helperText="支持 $1、$2、$&、$<name> 和 $$；允许留空以删除匹配内容"
+              maxLength={512}
+              spellCheck={false}
             />
 
             <Input
@@ -264,7 +326,7 @@ export default function ProxyProviders() {
               >
                 取消
               </Button>
-              <Button type="submit" disabled={isMutating}>
+              <Button type="submit" disabled={isMutating || !!renamePatternError}>
                 {pendingIntent === 'add' || pendingIntent === 'edit'
                   ? '处理中…'
                   : editingProvider
@@ -288,7 +350,9 @@ export default function ProxyProviders() {
                   <ListItem key={provider.id}>
                     <ListContent
                       title={provider.id}
-                      description={new Date(provider.updatedAt).toLocaleString('zh-CN')}
+                      description={`${
+                        provider.renamePattern ? '已配置节点改名 · ' : ''
+                      }${new Date(provider.updatedAt).toLocaleString('zh-CN')}`}
                       actions={
                         <div className="flex space-x-2">
                           <Button

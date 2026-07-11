@@ -7,6 +7,7 @@ import {
   IconTrash,
 } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
+import type { editor } from 'monaco-editor'
 import {
   Form,
   useActionData,
@@ -42,6 +43,8 @@ type ActionData =
   | { success: string; intent: 'create'; config: Config }
   | { success: string; intent: 'delete'; id: string }
   | { error: string; intent?: string }
+
+type YamlLanguageServiceState = 'loading' | 'ready' | 'fallback'
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   await requireAuth(request, context)
@@ -141,11 +144,39 @@ export default function Configs() {
   const [pendingSelection, setPendingSelection] = useState<Config | null>(null)
   const [pendingListReturn, setPendingListReturn] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Config | null>(null)
+  const [yamlLanguageService, setYamlLanguageService] =
+    useState<YamlLanguageServiceState>('loading')
+  const [validationIssueCount, setValidationIssueCount] = useState<
+    number | null
+  >(null)
   const pendingIntent = navigation.formData?.get('action')
   const isMutating = navigation.state !== 'idle' && pendingIntent !== null
   const isSaving = isMutating && pendingIntent === 'save'
   const hasUnsavedChanges =
     selectedId !== null && editorContent !== lastSavedContent
+
+  useEffect(() => {
+    if (!selectedId || yamlLanguageService !== 'loading') return
+
+    let active = true
+
+    import('~/libs/monaco-yaml.client')
+      .then(({ initializeMonacoYaml }) => {
+        initializeMonacoYaml()
+        if (active) setYamlLanguageService('ready')
+      })
+      .catch((error) => {
+        console.error('Failed to initialize the YAML language service', error)
+        if (active) {
+          setYamlLanguageService('fallback')
+          notify.error('Mihomo 语言服务加载失败，已切换到基础 YAML 编辑模式')
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [selectedId, yamlLanguageService])
 
   // 使用结构化操作响应更新对应配置，避免重复文案和跨配置响应污染状态。
   useEffect(() => {
@@ -202,7 +233,23 @@ export default function Configs() {
     setSelectedRevision(config.revision)
     setEditorContent(config.content)
     setLastSavedContent(config.content)
+    setValidationIssueCount(null)
   }
+
+  const handleEditorValidation = (markers: editor.IMarker[]) => {
+    setValidationIssueCount(markers.length)
+  }
+
+  const validationStatus =
+    yamlLanguageService === 'loading'
+      ? 'Mihomo 校验加载中…'
+      : yamlLanguageService === 'fallback'
+        ? '基础 YAML 模式'
+        : validationIssueCount === null
+          ? 'Mihomo 校验中…'
+          : validationIssueCount === 0
+            ? 'Mihomo 校验通过'
+            : `${validationIssueCount} 个 YAML 问题`
 
   const handleConfigSelect = (config: Config) => {
     if (isMutating) return
@@ -335,7 +382,12 @@ export default function Configs() {
                 <button type="button" onClick={returnToList} className="grid size-10 shrink-0 place-items-center rounded-[10px] hover:bg-gray-100 md:hidden dark:hover:bg-gray-900" aria-label="返回配置列表"><IconChevronLeft size={19} /></button>
                 <div className="min-w-0">
                   <h2 className="truncate text-sm font-medium">{selectedId || '选择配置'}</h2>
-                  {selectedId && <p className="mt-0.5 text-xs text-gray-500">{hasUnsavedChanges ? '有未保存的更改' : '已保存'}</p>}
+                  {selectedId && (
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {hasUnsavedChanges ? '有未保存的更改' : '已保存'} ·{' '}
+                      {validationStatus}
+                    </p>
+                  )}
                 </div>
               </div>
               {selectedId && selectedRevision !== null && (
@@ -353,14 +405,25 @@ export default function Configs() {
             </div>
             {selectedId ? (
               <div className="min-h-[60dvh] flex-1 overflow-hidden bg-[#1e1e1e] md:min-h-0">
-                <Editor
-                  height="100%"
-                  defaultLanguage="yaml"
-                  value={editorContent}
-                  onChange={handleEditorChange}
-                  theme="vs-dark"
-                  options={{ minimap: { enabled: false }, fontSize: 14, lineNumbers: 'on', wordWrap: 'on', scrollBeyondLastLine: false, automaticLayout: true, tabSize: 2, insertSpaces: true, detectIndentation: false, readOnly: isMutating, padding: { top: 18, bottom: 18 } }}
-                />
+                {yamlLanguageService === 'loading' ? (
+                  <div
+                    className="flex h-full min-h-[60dvh] items-center justify-center text-sm text-gray-400 md:min-h-0"
+                    role="status"
+                  >
+                    正在加载 Mihomo YAML 语言服务…
+                  </div>
+                ) : (
+                  <Editor
+                    height="100%"
+                    language="yaml"
+                    path={`file:///configs/${encodeURIComponent(selectedId)}.yaml`}
+                    value={editorContent}
+                    onChange={handleEditorChange}
+                    onValidate={handleEditorValidation}
+                    theme="vs-dark"
+                    options={{ minimap: { enabled: false }, fontSize: 14, lineNumbers: 'on', wordWrap: 'on', scrollBeyondLastLine: false, automaticLayout: true, tabSize: 2, insertSpaces: true, detectIndentation: false, readOnly: isMutating, padding: { top: 18, bottom: 18 } }}
+                  />
+                )}
               </div>
             ) : (
               <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-gray-500">从左侧选择一个配置开始编辑</div>

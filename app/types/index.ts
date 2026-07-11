@@ -10,6 +10,8 @@ export interface AuthToken {
 export interface ProxyProvider {
   id: string // Source ID - 小写字母、数字、连字符和英文句点组成
   subscriptionUrl: string // Subscription URL
+  renamePattern?: string // 节点名称匹配正则，留空表示不改名
+  renameReplacement?: string // String.replace 替换模板，支持 $1、$2 等占位符
   revision: number
   createdAt: string
   updatedAt: string
@@ -62,6 +64,8 @@ export interface LoginForm {
 export interface ProxyProviderForm {
   id: string
   subscriptionUrl: string
+  renamePattern?: string
+  renameReplacement?: string
 }
 
 export interface ConfigForm {

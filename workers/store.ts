@@ -215,6 +215,8 @@ export class ClashubStore implements DurableObject {
       }
       const body = (await request.json()) as {
         subscriptionUrl?: string
+        renamePattern?: string
+        renameReplacement?: string
         expectedRevision?: number
       }
       if (
@@ -225,6 +227,12 @@ export class ClashubStore implements DurableObject {
         const value: ProxyProvider = {
           id: providerId,
           subscriptionUrl: body.subscriptionUrl,
+          renamePattern:
+            typeof body.renamePattern === 'string' ? body.renamePattern : '',
+          renameReplacement:
+            typeof body.renameReplacement === 'string'
+              ? body.renameReplacement
+              : '',
           revision: 1,
           createdAt: now,
           updatedAt: now,
@@ -241,6 +249,12 @@ export class ClashubStore implements DurableObject {
         return this.updateResponse(
           await this.update<ProxyProvider>(key, body.expectedRevision!, {
             subscriptionUrl: body.subscriptionUrl,
+            renamePattern:
+              typeof body.renamePattern === 'string' ? body.renamePattern : '',
+            renameReplacement:
+              typeof body.renameReplacement === 'string'
+                ? body.renameReplacement
+                : '',
           }),
         )
       }

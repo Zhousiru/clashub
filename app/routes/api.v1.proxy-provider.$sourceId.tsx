@@ -1,6 +1,11 @@
 import { getStoreService } from '~/libs/services/store'
+import {
+  parseProxySubscription,
+  replaceProxyNames,
+  SubscriptionFormatError,
+} from '~/libs/utils/subscription'
 import { requireApiAuth } from '~/libs/utils/auth'
-import { extractProxiesFromClash } from '~/libs/utils/yaml'
+import { stringifyYaml } from '~/libs/utils/yaml'
 import type { Route } from './+types/api.v1.proxy-provider.$sourceId'
 
 export async function loader({ request, context, params }: Route.LoaderArgs) {
@@ -26,7 +31,8 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     // 获取订阅链接的内容
     const response = await fetch(provider.subscriptionUrl, {
       headers: {
-        'User-Agent': 'Clashub/1.0',
+        Accept: 'application/yaml, application/json, text/plain, */*',
+        'User-Agent': 'clash.meta',
       },
     })
 
@@ -37,10 +43,27 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       )
     }
 
-    const yamlContent = await response.text()
+    const contentLength = Number(response.headers.get('Content-Length'))
+    if (Number.isFinite(contentLength) && contentLength > 10 * 1024 * 1024) {
+      throw new Response('Subscription content exceeds the 10 MiB limit', {
+        status: 502,
+      })
+    }
 
-    // 提取 proxies 块
-    const proxiesYaml = extractProxiesFromClash(yamlContent)
+    const subscriptionContent = await response.text()
+    if (new TextEncoder().encode(subscriptionContent).byteLength > 10 * 1024 * 1024) {
+      throw new Response('Subscription content exceeds the 10 MiB limit', {
+        status: 502,
+      })
+    }
+
+    const parsed = parseProxySubscription(subscriptionContent)
+    const proxies = replaceProxyNames(
+      parsed.proxies,
+      provider.renamePattern,
+      provider.renameReplacement,
+    )
+    const proxiesYaml = stringifyYaml({ proxies })
 
     // 返回处理后的内容
     return new Response(proxiesYaml, {
@@ -48,11 +71,18 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
         'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'public, max-age=300', // 缓存 5 分钟
         'X-Source-Id': sourceId,
+        'X-Subscription-Format': parsed.format,
       },
     })
   } catch (error) {
     if (error instanceof Response) {
       throw error
+    }
+
+    if (error instanceof SubscriptionFormatError) {
+      throw new Response(`Unsupported subscription: ${error.message}`, {
+        status: 502,
+      })
     }
 
     console.error(`API Error [${sourceId}]:`, error)
