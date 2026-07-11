@@ -1,6 +1,8 @@
 import Editor from '@monaco-editor/react'
 import {
+  IconAlertTriangle,
   IconChevronLeft,
+  IconCircleX,
   IconCopy,
   IconDeviceFloppy,
   IconPlus,
@@ -45,6 +47,14 @@ type ActionData =
   | { error: string; intent?: string }
 
 type YamlLanguageServiceState = 'loading' | 'ready' | 'fallback'
+
+interface ValidationIssues {
+  errors: number
+  warnings: number
+}
+
+const MONACO_MARKER_WARNING = 4
+const MONACO_MARKER_ERROR = 8
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   await requireAuth(request, context)
@@ -146,9 +156,8 @@ export default function Configs() {
   const [deleteTarget, setDeleteTarget] = useState<Config | null>(null)
   const [yamlLanguageService, setYamlLanguageService] =
     useState<YamlLanguageServiceState>('loading')
-  const [validationIssueCount, setValidationIssueCount] = useState<
-    number | null
-  >(null)
+  const [validationIssues, setValidationIssues] =
+    useState<ValidationIssues | null>(null)
   const pendingIntent = navigation.formData?.get('action')
   const isMutating = navigation.state !== 'idle' && pendingIntent !== null
   const isSaving = isMutating && pendingIntent === 'save'
@@ -233,23 +242,21 @@ export default function Configs() {
     setSelectedRevision(config.revision)
     setEditorContent(config.content)
     setLastSavedContent(config.content)
-    setValidationIssueCount(null)
+    setValidationIssues(null)
   }
 
   const handleEditorValidation = (markers: editor.IMarker[]) => {
-    setValidationIssueCount(markers.length)
+    setValidationIssues(
+      markers.reduce<ValidationIssues>(
+        (issues, marker) => {
+          if (marker.severity === MONACO_MARKER_ERROR) issues.errors += 1
+          if (marker.severity === MONACO_MARKER_WARNING) issues.warnings += 1
+          return issues
+        },
+        { errors: 0, warnings: 0 },
+      ),
+    )
   }
-
-  const validationStatus =
-    yamlLanguageService === 'loading'
-      ? 'Mihomo 校验加载中…'
-      : yamlLanguageService === 'fallback'
-        ? '基础 YAML 模式'
-        : validationIssueCount === null
-          ? 'Mihomo 校验已启用'
-          : validationIssueCount === 0
-            ? 'Mihomo 校验通过'
-            : `${validationIssueCount} 个 YAML 问题`
 
   const handleConfigSelect = (config: Config) => {
     if (isMutating) return
@@ -383,9 +390,29 @@ export default function Configs() {
                 <div className="min-w-0">
                   <h2 className="truncate text-sm font-medium">{selectedId || '选择配置'}</h2>
                   {selectedId && (
-                    <p className="mt-0.5 text-xs text-gray-500">
-                      {hasUnsavedChanges ? '有未保存的更改' : '已保存'} ·{' '}
-                      {validationStatus}
+                    <p
+                      className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500"
+                      aria-live="polite"
+                    >
+                      <span>{hasUnsavedChanges ? '有未保存的更改' : '已保存'}</span>
+                      {yamlLanguageService === 'fallback' && (
+                        <span className="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-400">
+                          <IconAlertTriangle size={13} aria-hidden="true" />
+                          Mihomo 校验不可用
+                        </span>
+                      )}
+                      {(validationIssues?.errors ?? 0) > 0 && (
+                        <span className="inline-flex items-center gap-1 font-medium text-red-600 dark:text-red-400">
+                          <IconCircleX size={13} aria-hidden="true" />
+                          {validationIssues?.errors} 个错误
+                        </span>
+                      )}
+                      {(validationIssues?.warnings ?? 0) > 0 && (
+                        <span className="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-400">
+                          <IconAlertTriangle size={13} aria-hidden="true" />
+                          {validationIssues?.warnings} 个警告
+                        </span>
+                      )}
                     </p>
                   )}
                 </div>
